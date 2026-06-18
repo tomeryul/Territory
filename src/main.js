@@ -18,7 +18,8 @@
       tiles: state.tiles,
       session: state.session,
       economy: state.economy,
-      viewport: state.viewport,
+      // נשמר רק מרכז התצוגה; cols/rows מחושבים מחדש לפי המסך בכל מכשיר.
+      viewport: { centerX: state.viewport.centerX, centerY: state.viewport.centerY },
       theme: state.ui.theme,
     };
   }
@@ -33,7 +34,11 @@
       tiles: saved.tiles || initial.tiles,
       session: saved.session || initial.session,
       economy: saved.economy || initial.economy,
-      viewport: saved.viewport || initial.viewport,
+      // משמרים את ברירות המחדל של cols/rows ומחילים רק את המרכז השמור.
+      viewport: Object.assign({}, initial.viewport, {
+        centerX: (saved.viewport && saved.viewport.centerX) || initial.viewport.centerX,
+        centerY: (saved.viewport && saved.viewport.centerY) || initial.viewport.centerY,
+      }),
       ui: Object.assign({}, initial.ui, { theme: saved.theme || initial.ui.theme }),
     });
   }

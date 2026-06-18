@@ -52,9 +52,9 @@ window.Territory = window.Territory || {};
         h('h1', { class: 'topbar__title' }, 'Territory')
       ),
       h('div', { class: 'stats' },
-        Stat('שטח', S.territorySize(state) + ' משבצות'),
+        Stat('שטח', String(S.territorySize(state))),
         Stat('קרדיט', String(S.credits(state))),
-        Stat('זמן פעיל', S.activeTimeLabel(state))
+        Stat('זמן', S.activeTimeLabel(state))
       ),
       Button(isDark ? '☀️ יום' : '🌙 לילה', function () {
         d({ type: 'SET_THEME', theme: isDark ? 'light' : 'dark' });
@@ -279,14 +279,18 @@ window.Territory = window.Territory || {};
   }
 
   /* ===================================================================
-   * App — הרכבת כל האזורים יחד (השורש)
+   * App — הרכבת כל האזורים יחד (תיאור מבני; ראה הערה למטה)
+   * -------------------------------------------------------------------
+   * הרכבה הצהרתית של כל האזורים. בפועל ui/app.js מרנדר כל אזור לתוך
+   * slot נפרד (לאופטימיזציה ולמגן-פוקוס), אבל המבנה זהה — וכך זה ייראה
+   * כקומפוננטת שורש אחת ב-React.
    * =================================================================== */
   function App(ctx) {
     return h('div', { class: 'app' },
       TopBar(ctx),
       h('main', { class: 'main' },
-        h('div', { class: 'main__board' },
-          Grid(ctx),
+        h('section', { class: 'board' },
+          h('div', { class: 'grid-area' }, Grid(ctx)),
           Controls(ctx)
         ),
         EditorPanel(ctx)
@@ -294,5 +298,13 @@ window.Territory = window.Territory || {};
     );
   }
 
-  T.Components = { App: App };
+  // נחשפות גם הקומפוננטות הבודדות — שכבת ה-app מרנדרת כל אזור בנפרד
+  // (כדי לא לדרוס שדות קלט בזמן הקלדה; ראה ui/app.js).
+  T.Components = {
+    App: App,
+    TopBar: TopBar,
+    Grid: Grid,
+    Controls: Controls,
+    EditorPanel: EditorPanel,
+  };
 })(window.Territory);

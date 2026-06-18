@@ -106,8 +106,31 @@ window.Territory = window.Territory || {};
     return { users: users, tiles: tiles };
   }
 
+  /* ---- חישוב התאמת הרשת לשטח נתון (טהור) --------------------------- */
+  // קלט: רוחב/גובה השטח הזמין בפיקסלים. פלט: כמה עמודות/שורות וגודל תא,
+  // כך שהרשת תמלא את המסך בלי גלילה. cols/rows אי-זוגיים -> קיים תא מרכזי.
+  // [לוגיקה ניידת] מתמטיקה טהורה; שכבת ה-UI רק מודדת ומעבירה מספרים.
+  function computeGridFit(areaW, areaH) {
+    var g = Config.grid;
+    function oddClamp(n, min, max) {
+      n = Math.max(min, Math.min(max, n));
+      if (n % 2 === 0) n -= 1; // הופכים לאי-זוגי כדי שיהיה תא מרכזי
+      return Math.max(min, n);
+    }
+    // מנכים padding של הרשת לפני החישוב, ומתחשבים ברווחים בין התאים.
+    var usableW = Math.max(0, areaW - 2 * g.pad);
+    var usableH = Math.max(0, areaH - 2 * g.pad);
+    var cols = oddClamp(Math.floor(usableW / g.idealCellPx), g.minCols, g.maxCols);
+    var rows = oddClamp(Math.floor(usableH / g.idealCellPx), g.minRows, g.maxRows);
+    var cellW = (usableW - (cols - 1) * g.gap) / cols;
+    var cellH = (usableH - (rows - 1) * g.gap) / rows;
+    var cell = Math.max(g.minCellPx, Math.floor(Math.min(cellW, cellH)));
+    return { cols: cols, rows: rows, cell: cell };
+  }
+
   T.Logic = {
     key: key,
+    computeGridFit: computeGridFit,
     parseKey: parseKey,
     neighborKeys: neighborKeys,
     isAdjacentToOwner: isAdjacentToOwner,

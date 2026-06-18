@@ -50,8 +50,8 @@ window.Territory = window.Territory || {};
   // החלון הנראה כמטריצה דו-ממדית של "תאים מוכנים לרינדור".
   // כל תא כולל את כל מה שה-UI צריך — ה-UI רק מצייר, לא מחליט.
   function viewportTiles(state) {
-    var cols = Config.viewport.cols;
-    var rows = Config.viewport.rows;
+    var cols = state.viewport.cols || Config.viewport.cols;
+    var rows = state.viewport.rows || Config.viewport.rows;
     var originX = state.viewport.centerX - Math.floor(cols / 2);
     var originY = state.viewport.centerY - Math.floor(rows / 2);
     var meId = state.currentUserId;

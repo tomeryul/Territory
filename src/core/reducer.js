@@ -28,8 +28,13 @@ window.Territory = window.Territory || {};
       session: { activeMs: 0 },
       economy: { spent: 0 },
 
-      // חלון התצוגה — נשמר לפי מרכז.
-      viewport: { centerX: Config.start.x, centerY: Config.start.y },
+      // חלון התצוגה — מרכז + ממדי הרשת (cols/rows מותאמים למסך ע"י ה-UI).
+      viewport: {
+        centerX: Config.start.x,
+        centerY: Config.start.y,
+        cols: Config.viewport.cols,
+        rows: Config.viewport.rows,
+      },
 
       // מצב UI (לא נשמר ל-storage — חולף).
       ui: {
@@ -74,11 +79,27 @@ window.Territory = window.Territory || {};
       case 'PAN': {
         var cx = Math.min(state.world.width - 1, Math.max(0, state.viewport.centerX + action.dx));
         var cy = Math.min(state.world.height - 1, Math.max(0, state.viewport.centerY + action.dy));
-        return Object.assign({}, state, { viewport: { centerX: cx, centerY: cy } });
+        return Object.assign({}, state, {
+          viewport: Object.assign({}, state.viewport, { centerX: cx, centerY: cy }),
+        });
       }
       case 'CENTER_ON_START': {
         return Object.assign({}, state, {
-          viewport: { centerX: Config.start.x, centerY: Config.start.y },
+          viewport: Object.assign({}, state.viewport, {
+            centerX: Config.start.x, centerY: Config.start.y,
+          }),
+        });
+      }
+
+      /* --- התאמת ממדי הרשת לגודל המסך (נשלח משכבת ה-UI) --- */
+      case 'RESIZE': {
+        if (state.viewport.cols === action.cols && state.viewport.rows === action.rows) {
+          return state; // ללא שינוי — מונע re-render מיותר ולולאות
+        }
+        return Object.assign({}, state, {
+          viewport: Object.assign({}, state.viewport, {
+            cols: action.cols, rows: action.rows,
+          }),
         });
       }
 

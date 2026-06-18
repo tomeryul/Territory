@@ -19,7 +19,12 @@ window.Territory = window.Territory || {};
     start: { x: 500, y: 500 },
 
     // החלון הנראה על המסך. העולם גדול מדי לרינדור מלא — מרנדרים חלון בלבד.
-    viewport: { cols: 15, rows: 11, panStep: 1 },
+    // cols/rows הם רק ברירת מחדל התחלתית — שכבת ה-UI מחשבת אותם דינמית
+    // לפי גודל המסך בפועל (action 'RESIZE') כדי להתאים לכל מכשיר.
+    viewport: { cols: 9, rows: 13, panStep: 1 },
+
+    // אילוצי גודל הרשת הדינמית (ביחידות תאים) — משמשים את שכבת ה-UI.
+    grid: { idealCellPx: 46, minCellPx: 22, gap: 2, pad: 6, minCols: 5, maxCols: 25, minRows: 5, maxRows: 41 },
 
     // חוקי הכלכלה: צבירת קרדיטים לפי זמן פעיל + עלויות.
     economy: {
