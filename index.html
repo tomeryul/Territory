@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  Territory — משחק מסחר/טריטוריה (פרוטוטייפ Vanilla JS)
+  ====================================================================
+  הרצה: פותחים את index.html בדפדפן. אין build step, אין שרת.
+
+  ארכיטקטורה (הפרדה מוחלטת לוגיקה/תצוגה):
+    src/core/      -> לוגיקה ניידת טהורה (ללא DOM). עוברת ~1:1 לכל פלטפורמה.
+    src/platform/  -> עטיפות ל-Browser APIs (localStorage, timer, file).
+    src/ui/        -> שכבת תצוגה דקה (רינדור + האזנה בלבד).
+
+  הסקריפטים נטענים כ-classic scripts (לא ES modules) כדי שהקובץ ירוץ
+  ישירות מ-file:// בלי שרת. כל קובץ מוסיף ל-namespace אחד (window.Territory),
+  מה שממופה בקלות ל-import/export בעת המעבר ל-React.
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Territory — משחק טריטוריה</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- ===== core: לוגיקה ניידת טהורה (PORTABLE) ===== -->
+  <script src="src/core/config.js"></script>
+  <script src="src/core/tokens.js"></script>
+
+  <!-- ===== platform: אבסטרקציה ל-Browser APIs ===== -->
+  <script src="src/platform/platform.js"></script>
+
+  <!-- ===== core (המשך) ===== -->
+  <script src="src/core/logic.js"></script>
+  <script src="src/core/reducer.js"></script>
+  <script src="src/core/store.js"></script>
+  <script src="src/core/selectors.js"></script>
+
+  <!-- ===== ui: שכבת תצוגה דקה (PLATFORM-SPECIFIC) ===== -->
+  <script src="src/ui/h.js"></script>
+  <script src="src/ui/theme.js"></script>
+  <script src="src/ui/components.js"></script>
+  <script src="src/ui/app.js"></script>
+
+  <!-- ===== bootstrap ===== -->
+  <script src="src/main.js"></script>
+</body>
+</html>

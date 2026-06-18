@@ -1,0 +1,230 @@
+/* =====================================================================
+ * styles.css — סגנון (Flexbox בלבד, RTL, נטול ערכים קשיחים)
+ * ---------------------------------------------------------------------
+ * [UI ספציפי לפלטפורמה / PLATFORM-SPECIFIC]
+ * אין כאן ערכי עיצוב קשיחים — הכל var(--token) שמוזרק מ-core/tokens.js
+ * דרך src/ui/theme.js. Layout מבוסס Flexbox בלבד (ממיר היטב ל-RN/Flutter).
+ * ===================================================================== */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font-size: var(--font-base);
+  /* RTL ברמת המסמך מוגדר ב-HTML (dir="rtl"). */
+}
+
+#root { display: flex; height: 100%; }
+
+/* ---- שורש האפליקציה: עמודה במסך מלא ---- */
+.app {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ===== TopBar ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar__brand { display: flex; align-items: center; gap: var(--space-sm); }
+.topbar__logo { font-size: var(--font-xl); color: var(--color-accent); }
+.topbar__title { font-size: var(--font-lg); font-weight: 700; }
+
+.stats { display: flex; gap: var(--space-md); flex: 1; justify-content: center; flex-wrap: wrap; }
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 72px;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.stat__value { font-weight: 700; font-size: var(--font-base); }
+.stat__label { font-size: var(--font-sm); color: var(--color-muted); }
+
+/* ===== Main layout ===== */
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+.main__board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* ===== Grid (viewport) ===== */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-gap);
+  padding: var(--space-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.grid__row { display: flex; gap: var(--size-gap); }
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-cell);
+  height: var(--size-cell);
+  border-radius: var(--radius-sm);
+  background: var(--color-empty);
+  cursor: pointer;
+  transition: outline-color 0.1s ease, transform 0.05s ease;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.cell:hover { transform: scale(1.06); }
+.cell--void { background: transparent; cursor: default; opacity: 0.25; }
+.cell--void:hover { transform: none; }
+.cell--empty { background: var(--color-empty); }
+.cell--claimable { background: var(--color-empty-ownable); }
+.cell--claimable::after {
+  content: "+";
+  color: var(--color-accent);
+  font-weight: 700;
+}
+.cell--selected { outline-color: var(--color-text); }
+.cell--multi { outline-color: var(--color-accent); }
+
+.cell__tag {
+  position: absolute;
+  bottom: 2px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.cell__check {
+  font-size: var(--font-base);
+  font-weight: 700;
+  color: var(--color-accent-text);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+/* ===== Controls ===== */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.pad { display: flex; flex-direction: column; align-items: center; gap: var(--size-gap); }
+.pad__row { display: flex; gap: var(--size-gap); }
+.controls__meta { display: flex; flex-direction: column; gap: var(--space-sm); align-items: stretch; }
+.coords { font-size: var(--font-sm); color: var(--color-muted); text-align: center; }
+
+/* ===== Panel (editor) ===== */
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  align-self: flex-start;
+}
+.panel__title { font-size: var(--font-lg); }
+.panel__body { display: flex; flex-direction: column; gap: var(--space-md); }
+.panel__coord { font-size: var(--font-sm); color: var(--color-muted); }
+
+.field { display: flex; flex-direction: column; gap: var(--space-sm); }
+.field__label { font-size: var(--font-sm); color: var(--color-muted); }
+.field__row { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+.hint { font-size: var(--font-sm); color: var(--color-muted); line-height: 1.5; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+.swatch {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+}
+.swatch:hover { border-color: var(--color-text); }
+.color-input {
+  width: 36px; height: 28px; padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.text-input {
+  width: 100%;
+  padding: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-base);
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--color-accent); }
+.btn--primary {
+  color: var(--color-accent-text);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.btn--ghost { background: transparent; }
+.btn--disabled { opacity: 0.45; cursor: not-allowed; }
+.btn--disabled:hover { border-color: var(--color-border); }
+
+/* כפתור-קובץ: עוטף input חבוי */
+.file-btn { position: relative; overflow: hidden; }
+.file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* ===== רספונסיביות בסיסית (Flexbox מתקפל) ===== */
+@media (max-width: 720px) {
+  .main { flex-direction: column; }
+  .panel { width: 100%; }
+}
