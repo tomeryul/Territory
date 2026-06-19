@@ -34,8 +34,8 @@ window.Territory = window.Territory || {};
       // מצלמה: מרכז (קואורדינטות עולם) + scale (פיקסלים למשבצת).
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
 
-      // מטבע פרמיום והתקדמות משימות (נשמר).
-      meta: { gems: 0, claimedMissions: {} },
+      // מטבע פרמיום, התקדמות משימות, ובחירת אווטאר (נשמר).
+      meta: { gems: 0, claimedMissions: {}, avatarId: 'default', customAvatar: null },
 
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
@@ -155,6 +155,17 @@ window.Territory = window.Territory || {};
       case 'SET_EDIT_TAB':
         return Object.assign({}, state, {
           ui: Object.assign({}, state.ui, { editTab: action.tab }),
+        });
+
+      // בחירת אווטאר מהקטלוג.
+      case 'SET_AVATAR':
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { avatarId: action.id }),
+        });
+      // העלאת אווטאר אישי (תמונה) — נבחר אוטומטית.
+      case 'SET_CUSTOM_AVATAR':
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { customAvatar: action.dataUrl, avatarId: 'custom' }),
         });
 
       default:

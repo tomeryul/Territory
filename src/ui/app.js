@@ -173,6 +173,21 @@ window.Territory = window.Territory || {};
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(mapWrap);
     else window.addEventListener('resize', onResize);
 
+    /* ---- אנימציית אווטאר מונפש (מסובב פריימים, עמיד לרינדורים) ----- */
+    // עובד גם כשהאלמנט נבנה מחדש: סורק את ה-DOM ומציג פריים אחד בכל רגע.
+    var avatarFrame = 0;
+    setInterval(function () {
+      var nodes = document.querySelectorAll('.avatar--anim');
+      if (!nodes.length) return;
+      avatarFrame++;
+      for (var n = 0; n < nodes.length; n++) {
+        var imgs = nodes[n].children, count = imgs.length;
+        if (!count) continue;
+        var active = avatarFrame % count;
+        for (var i = 0; i < count; i++) imgs[i].style.display = i === active ? 'block' : 'none';
+      }
+    }, 220);
+
     store.subscribe(update);
     update();
   };
