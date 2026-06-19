@@ -24,6 +24,11 @@ window.Territory = window.Territory || {};
       users: world.users,
       tiles: world.tiles, // sparse: רק משבצות בבעלות מישהו
 
+      // אזורים מיוחדים (ים/עיר/רכבת) — נוף קבוע, לא ניתן לכיבוש.
+      zones: world.zones,
+      zonesInfo: world.zonesInfo,
+      zoneAnchors: world.zoneAnchors,
+
       // כלכלה: 'spent' מצטבר; הקרדיט הזמין נגזר מזמן פעיל פחות הוצאות (selectors).
       session: { activeMs: 0 },
       economy: { spent: 0 },
@@ -44,14 +49,6 @@ window.Territory = window.Territory || {};
       },
     };
   };
-
-  // עוזר קטן ולא-משנה-מקור (immutable) לעדכון משבצת אחת.
-  function patchTile(tiles, k, patch) {
-    var next = {};
-    for (var kk in tiles) next[kk] = tiles[kk];
-    next[k] = Object.assign({}, tiles[k], patch);
-    return next;
-  }
 
   /* ---- הקרדיט הזמין כרגע (גם כאן, כדי שה-reducer יאכוף עלויות) ------ */
   function availableCredits(state) {
@@ -141,26 +138,10 @@ window.Territory = window.Territory || {};
         tiles[ck] = {
           x: action.x, y: action.y, ownerId: state.currentUserId,
           color: state.users[state.currentUserId].color, imageUrl: null,
-          forSale: false, price: 0,
         };
         return Object.assign({}, state, {
           tiles: tiles,
           economy: { spent: state.economy.spent + Config.economy.claimCost },
-          ui: Object.assign({}, state.ui, { selection: { x: action.x, y: action.y } }),
-        });
-      }
-
-      /* --- קניית משבצת מאדם אחר --- */
-      case 'BUY_TILE': {
-        if (!L.canBuy(state, availableCredits(state), action.x, action.y)) return state;
-        var bk = L.key(action.x, action.y);
-        var price = state.tiles[bk].price;
-        var tiles2 = patchTile(state.tiles, bk, {
-          ownerId: state.currentUserId, forSale: false, price: 0,
-        });
-        return Object.assign({}, state, {
-          tiles: tiles2,
-          economy: { spent: state.economy.spent + price },
           ui: Object.assign({}, state.ui, { selection: { x: action.x, y: action.y } }),
         });
       }

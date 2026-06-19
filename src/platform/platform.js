@@ -75,18 +75,36 @@ window.Territory = window.Territory || {};
     return { start: start, stop: stop };
   };
 
-  /* ---- readImageFile: קריאת קובץ תמונה כ-Data URL -------------------- */
-  // עוטף את FileReader. מחזיר Promise<string|null> (dataURL).
+  /* ---- readImageFile: קריאת קובץ תמונה כ-Data URL (עם הקטנה) --------- */
+  // עוטף את FileReader + canvas. מקטין את התמונה ל-MAX_DIM כדי שה-data-URL
+  // יישאר קטן — אחרת תמונות גדולות חורגות ממכסת localStorage ומאיטות את
+  // הרינדור (זה היה הבאג של "הכנסת תמונה לא עובדת טוב").
+  // מחזיר Promise<string|null> (dataURL מוקטן, JPEG).
+  var MAX_DIM = 256;
   T.readImageFile = function (file) {
     return new Promise(function (resolve) {
       if (!file) return resolve(null);
       var reader = new FileReader();
       reader.onload = function () {
-        resolve(reader.result);
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+            var w = Math.max(1, Math.round(img.width * scale));
+            var hgt = Math.max(1, Math.round(img.height * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = hgt;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, hgt);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+          } catch (e) {
+            resolve(reader.result); // נפילה חיננית — מחזירים את המקור
+          }
+        };
+        img.onerror = function () { resolve(null); };
+        img.src = reader.result;
       };
-      reader.onerror = function () {
-        resolve(null);
-      };
+      reader.onerror = function () { resolve(null); };
       reader.readAsDataURL(file);
     });
   };

@@ -36,15 +36,25 @@ window.Territory = window.Territory || {};
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // המשבצת הנבחרת (אובייקט מלא או מידע על משבצת ריקה).
+  // סוג האזור (ים/עיר/רכבת) במשבצת, או null.
+  function zoneTypeAt(state, x, y) {
+    return (state.zones && state.zones[L.key(x, y)]) || null;
+  }
+
+  // המשבצת הנבחרת (אובייקט מלא, מידע על אזור, או משבצת ריקה).
   function selectedTile(state) {
     var sel = state.ui.selection;
     if (!sel) return null;
     var k = L.key(sel.x, sel.y);
     var tile = state.tiles[k];
-    if (tile) return tile;
-    // משבצת ריקה — מחזירים "stub" עם מטא-מידע לפעולה.
-    return { x: sel.x, y: sel.y, ownerId: null, color: null, imageUrl: null, forSale: false, price: 0 };
+    if (tile) return Object.assign({ zone: null }, tile);
+    var zType = zoneTypeAt(state, sel.x, sel.y);
+    // משבצת ריקה / אזור — מחזירים "stub" עם מטא-מידע לפעולה.
+    return {
+      x: sel.x, y: sel.y, ownerId: null, color: null, imageUrl: null,
+      zone: zType,
+      zoneInfo: zType ? state.zonesInfo[zType] : null,
+    };
   }
 
   // החלון הנראה כמטריצה דו-ממדית של "תאים מוכנים לרינדור".
@@ -70,6 +80,22 @@ window.Territory = window.Territory || {};
         var inside = L.inWorld(x, y);
         var mine = !!tile && tile.ownerId === meId;
 
+        // אזור (ים/עיר/רכבת) — כולל דגלי-חיבור לשכנים מאותו סוג, כדי
+        // שה-UI יוכל לצייר את האזור כצורה אחת רציפה עם פינות מעוגלות.
+        var zType = zoneTypeAt(state, x, y);
+        var zone = null;
+        if (zType) {
+          zone = {
+            type: zType,
+            info: state.zonesInfo[zType],
+            anchor: state.zoneAnchors && state.zoneAnchors[k] === zType,
+            up: zoneTypeAt(state, x, y - 1) === zType,
+            down: zoneTypeAt(state, x, y + 1) === zType,
+            left: zoneTypeAt(state, x - 1, y) === zType,
+            right: zoneTypeAt(state, x + 1, y) === zType,
+          };
+        }
+
         row.push({
           x: x, y: y, key: k,
           inside: inside,
@@ -77,11 +103,9 @@ window.Territory = window.Territory || {};
           mine: mine,
           ownerColor: tile ? tile.color : null,
           imageUrl: tile ? tile.imageUrl : null,
-          forSale: tile ? tile.forSale : false,
-          price: tile ? tile.price : 0,
+          zone: zone, // null אם לא אזור
           // דגלי-פעולה מחושבים מראש (ה-UI לא מחשב חוקים):
           claimable: inside && !tile && L.canClaim(state, avail, x, y),
-          buyable: inside && L.canBuy(state, avail, x, y),
           selected: k === selKey,
           inMulti: multi.on && multi.keys.indexOf(k) >= 0,
         });

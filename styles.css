@@ -142,23 +142,68 @@ html, body {
 .cell--claimable::after { content: "+"; color: var(--color-accent); font-weight: 700; font-size: 0.8em; }
 .cell--selected { outline-color: var(--color-text); }
 .cell--multi { outline-color: var(--color-accent); }
+.cell--zone { background: transparent; }
 
-.cell__tag {
-  position: absolute;
-  bottom: 1px;
-  font-size: 9px;
-  line-height: 1;
-  padding: 1px 3px;
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-}
 .cell__check {
+  position: relative;
+  z-index: 2;
   font-size: 0.9em;
   font-weight: 700;
   color: var(--color-accent-text);
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
 }
+
+/* ===== Zones (אזורים מיוחדים) — מילוי שמתמזג לצורה אחת ===== */
+/* top/right/bottom/left + פינות מעוגלות נקבעים inline לפי חיבור לשכנים. */
+.zone-fill {
+  position: absolute;
+  z-index: 0;
+  background-color: #555;
+}
+/* ים — כחול עם נצנוץ-גלים אלכסוני */
+.zone--sea {
+  background-color: #1d6fb8;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.10) 0 5px, transparent 5px 11px),
+    linear-gradient(180deg, #2a86d6, #155a99);
+}
+/* עיר — אפור עם "חלונות" אנכיים */
+.zone--city {
+  background-color: #5a6270;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.30) 0 3px, transparent 3px 8px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.10) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #6b7280, #434a57);
+}
+/* רכבת — שתי מסילות מתכת + אדנים רוחביים */
+.zone--rail {
+  background-color: #7a5a42;
+  background-image:
+    linear-gradient(180deg, transparent 28%, #d6d9de 28% 36%, transparent 36% 64%, #d6d9de 64% 72%, transparent 72%),
+    repeating-linear-gradient(90deg, rgba(40, 28, 18, 0.85) 0 3px, transparent 3px 9px),
+    linear-gradient(180deg, #835f44, #6b4f3a);
+}
+
+/* תווית-אזור (אייקון + שם) — מוצגת פעם אחת לכל אזור */
+.zone-label {
+  position: absolute;
+  z-index: 2;
+  top: 2px;
+  inset-inline-start: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: calc(100% - 4px);
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  pointer-events: none;
+}
+.zone-label__emoji { font-size: 12px; }
 
 /* ===== Controls ===== */
 .controls {
@@ -225,6 +270,25 @@ html, body {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+/* תצוגה מקדימה של תמונת המשבצת */
+.img-preview {
+  width: 100%;
+  height: 96px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.img-preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-sm);
+  color: var(--color-muted);
 }
 
 /* ===== Buttons ===== */

@@ -88,18 +88,21 @@ window.Territory = window.Territory || {};
     var cls = 'cell';
     if (!cell.inside) cls += ' cell--void';
     else if (cell.mine) cls += ' cell--mine';
-    else if (cell.tile) cls += ' cell--other';
+    else if (cell.zone) cls += ' cell--zone';
     else cls += ' cell--empty';
     if (cell.claimable) cls += ' cell--claimable';
     if (cell.selected) cls += ' cell--selected';
     if (cell.inMulti) cls += ' cell--multi';
 
+    // רקע משבצת בבעלותי: צבע + (אופציונלי) תמונה. מצטטים את ה-URL כראוי
+    // כדי שגם data-URL וגם כתובות עם תווים מיוחדים יעבדו.
     var style = {};
     if (cell.ownerColor) style.background = cell.ownerColor;
     if (cell.imageUrl) {
-      style.backgroundImage = 'url(' + cell.imageUrl + ')';
+      style.backgroundImage = 'url("' + cell.imageUrl + '")';
       style.backgroundSize = 'cover';
       style.backgroundPosition = 'center';
+      style.backgroundRepeat = 'no-repeat';
     }
 
     // [UI] תרגום קליק לפעולה — מחליטים *איזה* action, לא *מה הוא עושה*.
@@ -112,8 +115,36 @@ window.Territory = window.Territory || {};
     }
 
     return h('div', { class: cls, style: style, onClick: cell.inside ? onClick : null },
-      cell.forSale ? h('span', { class: 'cell__tag' }, '₪' + cell.price) : null,
+      cell.zone ? ZoneFill(cell.zone) : null,
+      cell.zone && cell.zone.anchor ? ZoneLabel(cell.zone) : null,
       cell.inMulti ? h('span', { class: 'cell__check' }, '✓') : null
+    );
+  }
+
+  // שכבת המילוי של אזור — נמתחת אל תוך הרווחים לכיוון שכנים מאותו סוג,
+  // כך שכמה משבצות אזור נראות כצורה אחת רציפה עם פינות חיצוניות מעוגלות.
+  function ZoneFill(zone) {
+    var g = T.Tokens.size.gap;        // רוחב הרווח בין תאים
+    var R = T.Tokens.radius.md + 'px'; // עיגול פינה חיצונית
+    var bleed = function (connected) { return connected ? (-g + 'px') : '0'; };
+    var corner = function (a, b) { return (!a && !b) ? R : '0'; };
+
+    var style = {
+      top: bleed(zone.up), bottom: bleed(zone.down),
+      left: bleed(zone.left), right: bleed(zone.right),
+      borderTopLeftRadius: corner(zone.up, zone.left),
+      borderTopRightRadius: corner(zone.up, zone.right),
+      borderBottomLeftRadius: corner(zone.down, zone.left),
+      borderBottomRightRadius: corner(zone.down, zone.right),
+    };
+    return h('div', { class: 'zone-fill zone--' + zone.type, style: style });
+  }
+
+  // תווית-אזור (אייקון + שם) — מוצגת פעם אחת לכל אזור (במשבצת העוגן).
+  function ZoneLabel(zone) {
+    return h('span', { class: 'zone-label' },
+      h('span', { class: 'zone-label__emoji' }, zone.info.emoji),
+      h('span', { class: 'zone-label__name' }, zone.info.name)
     );
   }
 
@@ -169,7 +200,7 @@ window.Territory = window.Territory || {};
     var sel = S.selectedTile(state);
     if (!sel) {
       return Panel('עריכת משבצת', [
-        h('p', { class: 'hint' }, 'בחר משבצת מהמפה כדי לערוך, לכבוש או לקנות.'),
+        h('p', { class: 'hint' }, 'בחר משבצת מהמפה כדי לערוך או לכבוש. צוברים קרדיט פשוט מלהשאיר את האפליקציה פתוחה.'),
       ]);
     }
 
@@ -181,38 +212,26 @@ window.Territory = window.Territory || {};
       return Panel('המשבצת שלי', [
         coordLine,
         ColorEditor([key], ctx),
-        ImageEditor([key], ctx),
+        ImageEditor([key], ctx, sel.imageUrl),
       ]);
     }
 
-    // (ב) משבצת ריקה -> כיבוש (אם צמודה + מספיק קרדיט).
-    if (!sel.ownerId) {
-      var canClaim = L.canClaim(state, S.credits(state), sel.x, sel.y);
-      return Panel('משבצת פנויה', [
+    // (ב) אזור מיוחד (ים/עיר/רכבת) -> מידע בלבד, לא ניתן לכיבוש.
+    if (sel.zone) {
+      return Panel('אזור: ' + sel.zoneInfo.name + ' ' + sel.zoneInfo.emoji, [
         coordLine,
-        h('p', { class: 'hint' }, 'עלות כיבוש: ' + T.Config.economy.claimCost + ' קרדיט. חייבת להיות צמודה לטריטוריה שלך.'),
-        Button('כבוש משבצת', function () { d({ type: 'CLAIM_TILE', x: sel.x, y: sel.y }); },
-          { primary: true, disabled: !canClaim,
-            title: canClaim ? '' : 'לא צמודה לטריטוריה שלך או אין מספיק קרדיט' }),
+        h('p', { class: 'hint' }, 'זהו אזור מיוחד בנוף ואי אפשר לכבוש אותו. אפשר להתרחב סביבו.'),
       ]);
     }
 
-    // (ג) משבצת של יריב.
-    var owner = state.users[sel.ownerId];
-    var ownerName = owner ? owner.name : 'יריב';
-    if (sel.forSale) {
-      var canBuy = L.canBuy(state, S.credits(state), sel.x, sel.y);
-      return Panel('משבצת של ' + ownerName, [
-        coordLine,
-        h('p', { class: 'hint' }, 'מוצעת למכירה במחיר ' + sel.price + ' קרדיט. חייבת להיות צמודה לטריטוריה שלך.'),
-        Button('קנה ב-' + sel.price, function () { d({ type: 'BUY_TILE', x: sel.x, y: sel.y }); },
-          { primary: true, disabled: !canBuy,
-            title: canBuy ? '' : 'לא צמודה לטריטוריה שלך או אין מספיק קרדיט' }),
-      ]);
-    }
-    return Panel('משבצת של ' + ownerName, [
+    // (ג) משבצת ריקה -> כיבוש (אם צמודה + מספיק קרדיט).
+    var canClaim = L.canClaim(state, S.credits(state), sel.x, sel.y);
+    return Panel('משבצת פנויה', [
       coordLine,
-      h('p', { class: 'hint' }, 'המשבצת אינה מוצעת למכירה.'),
+      h('p', { class: 'hint' }, 'עלות כיבוש: ' + T.Config.economy.claimCost + ' קרדיט. חייבת להיות צמודה לטריטוריה שלך.'),
+      Button('כבוש משבצת', function () { d({ type: 'CLAIM_TILE', x: sel.x, y: sel.y }); },
+        { primary: true, disabled: !canClaim,
+          title: canClaim ? '' : 'לא צמודה לטריטוריה שלך או אין מספיק קרדיט' }),
     ]);
   }
 
@@ -238,19 +257,22 @@ window.Territory = window.Territory || {};
     );
   }
 
-  // עורך תמונה: כתובת URL או העלאת קובץ (דרך שכבת platform).
-  function ImageEditor(keys, ctx) {
+  // עורך תמונה: תצוגה מקדימה + כתובת URL + העלאת קובץ (דרך שכבת platform).
+  // currentImg (אופציונלי) — התמונה הנוכחית של המשבצת הבודדת, לתצוגה מקדימה.
+  function ImageEditor(keys, ctx, currentImg) {
     var d = ctx.dispatch;
+    // לא מציגים data-URL ארוך בשדה הטקסט (מכוער); מציגים רק כתובות http.
+    var urlValue = currentImg && currentImg.indexOf('data:') !== 0 ? currentImg : '';
 
     var urlInput = h('input', {
-      type: 'text', class: 'text-input', placeholder: 'הדבק כתובת תמונה (URL)',
+      type: 'url', class: 'text-input', placeholder: 'הדבק כתובת תמונה (URL)', value: urlValue,
       onChange: function (e) {
         var url = e.target.value.trim();
         d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: url || null });
       },
     });
 
-    // [UI/Platform] קריאת קובץ עוברת דרך T.readImageFile (אבסטרקציה).
+    // [UI/Platform] קריאת קובץ עוברת דרך T.readImageFile (כולל הקטנה).
     var fileInput = h('input', {
       type: 'file', accept: 'image/*', class: 'file-input',
       onChange: function (e) {
@@ -258,11 +280,17 @@ window.Territory = window.Territory || {};
         T.readImageFile(file).then(function (dataUrl) {
           if (dataUrl) d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: dataUrl });
         });
+        e.target.value = ''; // איפוס כדי שאפשר לבחור שוב את אותו קובץ
       },
     });
 
+    var preview = currentImg
+      ? h('div', { class: 'img-preview', style: { backgroundImage: 'url("' + currentImg + '")' } })
+      : h('div', { class: 'img-preview img-preview--empty' }, 'אין תמונה');
+
     return h('div', { class: 'field' },
       h('label', { class: 'field__label' }, 'תמונה'),
+      preview,
       urlInput,
       h('div', { class: 'field__row' },
         h('label', { class: 'btn btn--ghost file-btn' }, 'העלה קובץ', fileInput),

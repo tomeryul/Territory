@@ -9,7 +9,7 @@
 (function (T) {
   'use strict';
 
-  var STORAGE_KEY = 'territory.save.v1';
+  var STORAGE_KEY = 'territory.save.v2';
 
   // ----- חלקי ה-state שכן נשמרים (החלקים החולפים של ה-UI לא נשמרים) -----
   function persistable(state) {

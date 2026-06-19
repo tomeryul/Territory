@@ -44,66 +44,65 @@ window.Territory = window.Territory || {};
   /* ---- ולידציות פעולה (טהורות) — משמשות גם את ה-reducer וגם את ה-UI -- */
   // (ה-UI משתמש בהן כדי להפעיל/לכבות כפתורים; ה-reducer כדי לאכוף חוקים.)
 
-  // כיבוש משבצת ריקה: חייבת להיות בעולם, ריקה, צמודה לטריטוריה שלי, ומספיק קרדיט.
+  // כיבוש משבצת ריקה: חייבת להיות בעולם, ריקה (לא בבעלות ולא אזור מיוחד),
+  // צמודה לטריטוריה שלי, ועם מספיק קרדיט. זו הדרך *היחידה* להתרחב כרגע.
   function canClaim(state, credits, x, y) {
     if (!inWorld(x, y)) return false;
-    if (state.tiles[key(x, y)]) return false; // תפוסה
+    if (state.tiles[key(x, y)]) return false;          // תפוסה ע"י שחקן
+    if (state.zones && state.zones[key(x, y)]) return false; // אזור מיוחד (ים/עיר/רכבת)
     if (!isAdjacentToOwner(state.tiles, state.currentUserId, x, y)) return false;
     return credits >= Config.economy.claimCost;
   }
 
-  // קניית משבצת מאדם אחר: בבעלות אחר, מוצעת למכירה, צמודה לטריטוריה שלי, ומספיק קרדיט.
-  function canBuy(state, credits, x, y) {
-    var t = state.tiles[key(x, y)];
-    if (!t) return false;
-    if (t.ownerId === state.currentUserId) return false; // כבר שלי
-    if (!t.forSale) return false;
-    if (!isAdjacentToOwner(state.tiles, state.currentUserId, x, y)) return false;
-    return credits >= t.price;
-  }
-
   /* ---- זריעת העולם ההתחלתי (טהורה, דטרמיניסטית) --------------------- */
-  // יוצרת את המשבצת ההתחלתית של השחקן + משבצות שכנות בבעלות "יריבים",
-  // חלקן מוצעות למכירה — כדי שיהיה מה לקנות ולהתרחב אליו.
+  // יוצרת את המשבצת ההתחלתית של השחקן + "אזורים" מיוחדים רב-משבצתיים
+  // (ים / עיר / רכבת) הפזורים בעולם. האזורים אינם ניתנים לכיבוש —
+  // הם חלק מהנוף שסביבו השחקן מתרחב.
   function seedWorld() {
     var s = Config.start;
     var pal = T.Tokens.palette;
 
-    var users = {
-      me: { id: 'me', name: 'אני', color: pal.brand },
-      ai1: { id: 'ai1', name: 'יריב אדום', color: pal.red },
-      ai2: { id: 'ai2', name: 'יריב ירוק', color: pal.green },
-      ai3: { id: 'ai3', name: 'יריב סגול', color: pal.purple },
-    };
+    var users = { me: { id: 'me', name: 'אני', color: pal.brand } };
 
     var tiles = {};
     // המשבצת היחידה של השחקן בתחילת הדרך.
-    tiles[key(s.x, s.y)] = {
-      x: s.x, y: s.y, ownerId: 'me', color: users.me.color, imageUrl: null,
-      forSale: false, price: 0,
+    tiles[key(s.x, s.y)] = { x: s.x, y: s.y, ownerId: 'me', color: users.me.color, imageUrl: null };
+
+    // מטא-מידע לכל סוג אזור (שם + אייקון לתצוגה).
+    var zonesInfo = {
+      sea: { name: 'ים', emoji: '🌊' },
+      city: { name: 'עיר', emoji: '🏙️' },
+      rail: { name: 'רכבת', emoji: '🚆' },
     };
 
-    // משבצות יריבים סביב נקודת ההתחלה — חלקן למכירה (forSale).
-    var seeds = [
-      { dx: 1, dy: 0, owner: 'ai1', forSale: true, price: 4 },
-      { dx: 2, dy: 0, owner: 'ai1', forSale: true, price: 6 },
-      { dx: 2, dy: 1, owner: 'ai1', forSale: false, price: 0 },
-      { dx: 0, dy: -1, owner: 'ai2', forSale: true, price: 5 },
-      { dx: 0, dy: -2, owner: 'ai2', forSale: false, price: 0 },
-      { dx: -1, dy: 1, owner: 'ai3', forSale: true, price: 5 },
-      { dx: -2, dy: 1, owner: 'ai3', forSale: true, price: 7 },
-      { dx: -1, dy: -1, owner: 'ai2', forSale: true, price: 8 },
-      { dx: 1, dy: 2, owner: 'ai3', forSale: false, price: 0 },
-    ];
-    seeds.forEach(function (sd) {
-      var x = s.x + sd.dx, y = s.y + sd.dy;
-      tiles[key(x, y)] = {
-        x: x, y: y, ownerId: sd.owner, color: users[sd.owner].color,
-        imageUrl: null, forSale: sd.forSale, price: sd.price,
-      };
-    });
+    var zones = {};        // "x,y" -> סוג אזור
+    var zoneAnchors = {};  // "x,y" -> סוג אזור (משבצת אחת לכל אזור שתישא תווית)
 
-    return { users: users, tiles: tiles };
+    // ממלא מלבן באזור, ומסמן את הפינה כעוגן-תווית.
+    function rect(type, x0, x1, y0, y1) {
+      for (var x = x0; x <= x1; x++) {
+        for (var y = y0; y <= y1; y++) zones[key(x, y)] = type;
+      }
+      zoneAnchors[key(x0, y0)] = type;
+    }
+    // ממלא רצף משבצות (קו, למשל מסילה), ומסמן את הראשונה כעוגן.
+    function line(type, pts) {
+      pts.forEach(function (p) { zones[key(p[0], p[1])] = type; });
+      zoneAnchors[key(pts[0][0], pts[0][1])] = type;
+    }
+
+    // פריסה סביב נקודת ההתחלה (משאירים את 4 השכנים הישירים פנויים כדי
+    // שתמיד אפשר להתחיל להתרחב).
+    rect('sea', s.x - 6, s.x - 3, s.y + 2, s.y + 6);   // ים — בלוק לרוחב משמאל-מטה
+    rect('city', s.x + 2, s.x + 4, s.y - 5, s.y - 2);  // עיר — בלוק מימין-מעלה
+    var rail = [];                                     // רכבת — קו ארוך
+    for (var rx = s.x - 7; rx <= s.x + 9; rx++) rail.push([rx, s.y + 9]);
+    line('rail', rail);
+
+    return {
+      users: users, tiles: tiles,
+      zones: zones, zonesInfo: zonesInfo, zoneAnchors: zoneAnchors,
+    };
   }
 
   /* ---- חישוב התאמת הרשת לשטח נתון (טהור) --------------------------- */
@@ -136,7 +135,6 @@ window.Territory = window.Territory || {};
     isAdjacentToOwner: isAdjacentToOwner,
     inWorld: inWorld,
     canClaim: canClaim,
-    canBuy: canBuy,
     seedWorld: seedWorld,
   };
 })(window.Territory);
