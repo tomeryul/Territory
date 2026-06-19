@@ -2,11 +2,11 @@
  * components.js — קומפוננטות UI (פונקציות רינדור דמויות-קומפוננטה)
  * ---------------------------------------------------------------------
  * [UI ספציפי לפלטפורמה / PLATFORM-SPECIFIC]
- * כל אזור-מסך = פונקציה שמחזירה עץ אלמנטים (h). בלי לוגיקה עסקית:
- * קוראות נתונים מ-Selectors ושולחות actions / פקודות-מצלמה.
- * המפה עצמה היא <canvas> שמנוהל ב-app.js (ציור אימפרטיבי), לא כאן.
+ * סגנון אפליקציית מובייל: סרגל מטבעות + אווטאר/רמה למעלה, ניווט תחתון,
+ * מסך מפה עם בקרות צפות וגיליון-עריכה, ומסכי משימות/פרופיל/הגדרות.
+ * בלי לוגיקה עסקית — קוראות מ-Selectors/Progression ושולחות actions.
  *
- * ctx = { state, dispatch, S, L, cam } כאשר cam = פקודות מצלמה מ-app.js.
+ * ctx = { state, dispatch, S, L, P, cam }
  * ===================================================================== */
 
 window.Territory = window.Territory || {};
@@ -17,178 +17,267 @@ window.Territory = window.Territory || {};
   var h = T.h;
 
   var COLOR_PRESETS = [
-    T.Tokens.palette.brand, T.Tokens.palette.red, T.Tokens.palette.green,
-    T.Tokens.palette.purple, T.Tokens.palette.amber, '#00b8d9', '#ff6b9d', '#94a3b8',
+    T.Tokens.palette.brand, T.Tokens.palette.cyan, T.Tokens.palette.green,
+    T.Tokens.palette.purple, T.Tokens.palette.pink, T.Tokens.palette.red,
+    T.Tokens.palette.amber, T.Tokens.palette.slate,
   ];
 
+  /* ---- פרימיטיבים משותפים ---- */
   function Button(label, onClick, opts) {
     opts = opts || {};
     return h('button', {
-      class: 'btn' + (opts.primary ? ' btn--primary' : '') + (opts.disabled ? ' btn--disabled' : ''),
-      onClick: opts.disabled ? null : onClick,
-      disabled: opts.disabled, title: opts.title || null,
+      class: 'btn' + (opts.primary ? ' btn--primary' : '') + (opts.ghost ? ' btn--ghost' : '') +
+        (opts.block ? ' btn--block' : '') + (opts.disabled ? ' btn--disabled' : ''),
+      onClick: opts.disabled ? null : onClick, disabled: opts.disabled, title: opts.title || null,
     }, label);
   }
+  function Bar(p) {
+    return h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: Math.round(Math.max(0, Math.min(1, p)) * 100) + '%' } }));
+  }
+  function Chip(icon, val, kind) {
+    return h('div', { class: 'chip chip--' + kind }, h('span', { class: 'chip__icon' }, icon), h('span', { class: 'chip__val' }, String(val)));
+  }
+  function Avatar(big) { return h('div', { class: 'avatar' + (big ? ' avatar--lg' : '') }, '🐱'); }
 
   /* ===================================================================
-   * TopBar — נתוני שחקן + מתג מצב לילה
+   * TopBar — מטבעות + אווטאר/רמה/XP (מוצג בכל המסכים)
    * =================================================================== */
   function TopBar(ctx) {
-    var state = ctx.state, S = ctx.S, d = ctx.dispatch;
-    var isDark = state.ui.theme === 'dark';
+    var st = ctx.state, P = ctx.P;
+    var lvl = P.levelInfo(st);
     return h('header', { class: 'topbar' },
-      h('div', { class: 'topbar__brand' },
-        h('span', { class: 'topbar__logo' }, '▦'),
-        h('h1', { class: 'topbar__title' }, 'Territory')
+      h('div', { class: 'currencies' },
+        Chip('💎', P.gems(st), 'gem'),
+        Chip('🪙', P.coinsLabel(st), 'coin'),
+        Chip('🏆', '#' + P.rank(st), 'rank')
       ),
-      h('div', { class: 'stats' },
-        Stat('שטח', String(S.territorySize(state))),
-        Stat('שווי תיק', '₪' + S.formatValue(S.portfolioValue(state))),
-        Stat('משבצת הבאה', S.nextTileLabel(state))
-      ),
-      Button(isDark ? '☀️' : '🌙', function () {
-        d({ type: 'SET_THEME', theme: isDark ? 'light' : 'dark' });
-      }, { title: 'מצב לילה לשהייה ארוכה' })
-    );
-  }
-
-  function Stat(label, value) {
-    return h('div', { class: 'stat' },
-      h('span', { class: 'stat__value' }, value),
-      h('span', { class: 'stat__label' }, label)
+      h('div', { class: 'profile-strip' },
+        Avatar(false),
+        h('div', { class: 'profile-strip__info' },
+          h('div', { class: 'profile-strip__row' },
+            h('span', { class: 'profile-strip__name' }, 'הטריטוריה שלי'),
+            h('span', { class: 'profile-strip__lvl' }, 'רמה ' + lvl.level)
+          ),
+          Bar(lvl.progress)
+        )
+      )
     );
   }
 
   /* ===================================================================
-   * Controls — זום / מבט / בחירה מרובה
-   * (פקודות המצלמה ב-app.js כי הן זקוקות לגודל ה-canvas)
+   * BottomNav — ניווט תחתון
    * =================================================================== */
-  function Controls(ctx) {
-    var state = ctx.state, d = ctx.dispatch, cam = ctx.cam;
-    var multiOn = state.ui.multiSelect.on;
-    return h('section', { class: 'controls' },
-      h('div', { class: 'controls__group' },
-        Button('−', function () { cam.zoom(-1); }, { title: 'התרחק' }),
-        h('span', { class: 'zoom-label' }, Math.round(state.camera.scale) + 'px'),
-        Button('+', function () { cam.zoom(1); }, { title: 'התקרב' })
-      ),
-      h('div', { class: 'controls__group' },
-        Button('🌍 כל העולם', function () { cam.fit(); }, { title: 'לראות את כל המפה' }),
-        Button('🎯 שלי', function () { cam.centerMe(); }, { title: 'חזרה לטריטוריה שלי' })
-      ),
-      Button(multiOn ? '✓ בחירה מרובה' : 'בחירה מרובה',
-        function () { d({ type: 'TOGGLE_MULTISELECT' }); },
-        { primary: multiOn, title: 'עריכת כמה משבצות יחד' })
-    );
+  var NAV = [
+    { id: 'profile', icon: '👤', label: 'פרופיל' },
+    { id: 'friends', icon: '👥', label: 'חברים' },
+    { id: 'map', icon: '🗺️', label: 'מפה' },
+    { id: 'chat', icon: '💬', label: 'צ׳אט' },
+    { id: 'settings', icon: '⚙️', label: 'הגדרות' },
+  ];
+  function BottomNav(ctx) {
+    var cur = ctx.state.ui.screen;
+    return h('nav', { class: 'bottomnav' }, NAV.map(function (it) {
+      var active = cur === it.id || (it.id === 'map' && (cur === 'market'));
+      return h('button', {
+        class: 'navitem' + (active ? ' navitem--active' : ''),
+        onClick: function () { ctx.dispatch({ type: 'SET_SCREEN', screen: it.id }); },
+      }, h('span', { class: 'navitem__icon' }, it.icon), h('span', { class: 'navitem__label' }, it.label));
+    }));
   }
 
   /* ===================================================================
-   * EditorPanel — עריכה/מידע לפי המשבצת הנבחרת
+   * MapOverlay — בקרות צפות + פעולות + גיליון עריכה (מעל ה-canvas)
    * =================================================================== */
-  function EditorPanel(ctx) {
-    var state = ctx.state, S = ctx.S, L = ctx.L;
-    var ms = state.ui.multiSelect;
-
-    if (ms.on && ms.keys.length > 0) {
-      return Panel('עריכת ' + ms.keys.length + ' משבצות יחד', [
-        ColorEditor(ms.keys, ctx),
-        ImageEditor(ms.keys, ctx, null),
-      ]);
+  function MapOverlay(ctx) {
+    var cam = ctx.cam, d = ctx.dispatch;
+    function Round(label, fn, title) {
+      return h('button', { class: 'round-btn', onClick: fn, title: title || null }, label);
     }
+    return h('div', { class: 'map-overlay' },
+      h('div', { class: 'side-controls' },
+        Round('＋', function () { cam.zoom(1); }, 'התקרב'),
+        Round('－', function () { cam.zoom(-1); }, 'התרחק'),
+        Round('🌍', function () { cam.fit(); }, 'כל העולם'),
+        Round('🎯', function () { cam.centerMe(); }, 'הטריטוריה שלי')
+      ),
+      h('div', { class: 'map-actions' },
+        Button('✏️ ערוך שטח', function () { d({ type: 'SELECT_TILE', x: T.Config.start.x, y: T.Config.start.y }); }, { primary: true, block: true }),
+        h('div', { class: 'map-actions__row' },
+          Button('🛒 שוק', function () { d({ type: 'SET_SCREEN', screen: 'market' }); }, { ghost: true }),
+          Button('🎯 משימות', function () { d({ type: 'SET_SCREEN', screen: 'missions' }); }, { ghost: true })
+        )
+      ),
+      EditSheet(ctx)
+    );
+  }
 
-    var sel = S.selectedTile(state);
-    if (!sel) {
-      return Panel('הטריטוריה שלך', [
-        h('p', { class: 'hint' }, 'המשבצות מתווספות אוטומטית ככל שנשארים באפליקציה — משחק איטי של בנייה והשקעה לטווח ארוך. גוררים להזזת המפה, צובטים/גלגל לזום.'),
-        h('p', { class: 'hint' }, '💡 טיפ: שווי התיק עולה כשהטריטוריה צמודה לאזורים בעלי-ערך (עיר, תשתית, מים). מיקום שווה כסף.'),
-      ]);
-    }
-
+  /* ---- גיליון עריכה (Bottom sheet) — מופיע כשמשבצת נבחרה ---- */
+  function EditSheet(ctx) {
+    var st = ctx.state, S = ctx.S, L = ctx.L, d = ctx.dispatch;
+    var sel = S.selectedTile(st);
+    if (!sel) return null;
     var key = L.key(sel.x, sel.y);
-    var coordLine = h('div', { class: 'panel__coord' }, 'משבצת ', h('strong', {}, sel.x + ', ' + sel.y));
+    var mine = sel.ownerId === st.currentUserId;
 
-    if (sel.ownerId === state.currentUserId) {
-      return Panel('המשבצת שלי', [
-        coordLine,
-        h('div', { class: 'value-badge' }, 'שווי משוער: ₪' + sel.value),
-        ColorEditor([key], ctx),
-        ImageEditor([key], ctx, sel.imageUrl),
-      ]);
-    }
-    if (sel.zone) {
-      return Panel(sel.zoneInfo.emoji + ' ' + sel.zoneInfo.name, [
-        coordLine,
-        h('div', { class: 'value-badge' }, 'ערך קרקע: ₪' + sel.zoneInfo.value),
+    var title = mine ? 'עריכת שטח' : sel.zone ? (sel.zoneInfo.emoji + ' ' + sel.zoneInfo.name) : 'משבצת פנויה';
+    var header = h('div', { class: 'sheet__header' },
+      h('button', { class: 'sheet__close', onClick: function () { d({ type: 'CLEAR_SELECTION' }); } }, '✕'),
+      h('h3', { class: 'sheet__title' }, title),
+      h('span', { class: 'sheet__coord' }, sel.x + ',' + sel.y)
+    );
+
+    var body;
+    if (mine) {
+      var tab = st.ui.editTab;
+      function Tab(id, label) {
+        return h('button', { class: 'tab' + (tab === id ? ' tab--active' : ''), onClick: function () { d({ type: 'SET_EDIT_TAB', tab: id }); } }, label);
+      }
+      var content = tab === 'image' ? ImageEditor([key], ctx, sel.imageUrl)
+        : tab === 'effects' ? EffectsEditor([key], ctx, sel)
+        : ColorEditor([key], ctx);
+      body = [
+        h('div', { class: 'value-badge' }, 'שווי משוער: 🪙 ' + (sel.value * T.Config.progression.coinPerValue)),
+        h('div', { class: 'tabs' }, Tab('color', 'צבע'), Tab('image', 'תמונה'), Tab('effects', 'אפקטים')),
+        content,
+      ];
+    } else if (sel.zone) {
+      body = [
+        h('div', { class: 'value-badge' }, 'ערך קרקע: 🪙 ' + sel.zoneInfo.value),
         h('p', { class: 'lesson' }, h('strong', {}, '📈 שיעור השקעה: '), sel.zoneInfo.lesson),
-        h('p', { class: 'hint' }, 'אזור זה חלק מהנוף ולא ניתן לכבוש אותו — אך כדאי להתרחב לידו כדי להעלות את שווי התיק.'),
-      ]);
+        h('p', { class: 'hint' }, 'אזור זה חלק מהנוף — התרחב לידו כדי להעלות את ערך התיק.'),
+      ];
+    } else {
+      body = [h('p', { class: 'hint' }, 'עוד לא שלך. הטריטוריה גדלה אוטומטית, צמודה לשטח שלך, ככל שנשארים במשחק.')];
     }
-    return Panel('משבצת פנויה', [
-      coordLine,
-      h('p', { class: 'hint' }, 'עוד לא שלך. המשבצות מתווספות אוטומטית, צמודות לטריטוריה, ככל שצוברים זמן.'),
-    ]);
+
+    return h('div', { class: 'sheet' }, header, h('div', { class: 'sheet__body' }, body));
   }
 
   function ColorEditor(keys, ctx) {
     var d = ctx.dispatch;
     var swatches = COLOR_PRESETS.map(function (color) {
-      return h('button', {
-        class: 'swatch', style: { background: color }, title: color,
-        onClick: function () { d({ type: 'SET_TILE_COLOR', keys: keys, color: color }); },
-      });
+      return h('button', { class: 'swatch', style: { background: color }, title: color,
+        onClick: function () { d({ type: 'SET_TILE_COLOR', keys: keys, color: color }); } });
     });
-    var picker = h('input', {
-      type: 'color', class: 'color-input',
-      onInput: function (e) { d({ type: 'SET_TILE_COLOR', keys: keys, color: e.target.value }); },
-    });
-    return h('div', { class: 'field' },
-      h('label', { class: 'field__label' }, 'צבע'),
-      h('div', { class: 'swatches' }, swatches, picker)
-    );
+    var picker = h('input', { type: 'color', class: 'color-input',
+      onInput: function (e) { d({ type: 'SET_TILE_COLOR', keys: keys, color: e.target.value }); } });
+    return h('div', { class: 'field' }, h('div', { class: 'swatches' }, swatches, picker));
   }
 
-  // עורך תמונה: תצוגה מקדימה + URL + העלאת קובץ (דרך שכבת platform).
   function ImageEditor(keys, ctx, currentImg) {
     var d = ctx.dispatch;
     var urlValue = currentImg && currentImg.indexOf('data:') !== 0 ? currentImg : '';
-
-    var urlInput = h('input', {
-      type: 'url', class: 'text-input', placeholder: 'הדבק כתובת תמונה (URL)', value: urlValue,
-      onChange: function (e) {
-        var url = e.target.value.trim();
-        d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: url || null });
-      },
-    });
-    var fileInput = h('input', {
-      type: 'file', accept: 'image/*', class: 'file-input',
-      onChange: function (e) {
-        var file = e.target.files && e.target.files[0];
-        T.readImageFile(file).then(function (dataUrl) {
-          if (dataUrl) d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: dataUrl });
-        });
-        e.target.value = '';
-      },
-    });
+    var urlInput = h('input', { type: 'url', class: 'text-input', placeholder: 'כתובת תמונה (URL)', value: urlValue,
+      onChange: function (e) { var u = e.target.value.trim(); d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: u || null }); } });
+    var fileInput = h('input', { type: 'file', accept: 'image/*', class: 'file-input',
+      onChange: function (e) { var f = e.target.files && e.target.files[0]; T.readImageFile(f).then(function (u) { if (u) d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: u }); }); e.target.value = ''; } });
     var preview = currentImg
       ? h('div', { class: 'img-preview', style: { backgroundImage: 'url("' + currentImg + '")' } })
       : h('div', { class: 'img-preview img-preview--empty' }, 'אין תמונה');
-
-    return h('div', { class: 'field' },
-      h('label', { class: 'field__label' }, 'תמונה'),
-      preview, urlInput,
+    return h('div', { class: 'field' }, preview, urlInput,
       h('div', { class: 'field__row' },
         h('label', { class: 'btn btn--ghost file-btn' }, 'העלה קובץ', fileInput),
-        Button('הסר תמונה', function () { d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: null }); })
+        Button('הסר', function () { d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: null }); })));
+  }
+
+  function EffectsEditor(keys, ctx, sel) {
+    var d = ctx.dispatch;
+    var op = sel.opacity == null ? 1 : sel.opacity;
+    var slider = h('input', { type: 'range', min: '20', max: '100', value: String(Math.round(op * 100)), class: 'slider',
+      onInput: function (e) { d({ type: 'SET_TILE_OPACITY', keys: keys, opacity: (+e.target.value) / 100 }); } });
+    return h('div', { class: 'field' },
+      h('div', { class: 'field__row', style: { justifyContent: 'space-between' } },
+        h('label', { class: 'field__label' }, 'שקיפות'),
+        h('span', { class: 'field__label' }, Math.round(op * 100) + '%')),
+      slider);
+  }
+
+  /* ===================================================================
+   * Screen — מסכים שאינם המפה (מרונדרים מחוץ ל-canvas)
+   * =================================================================== */
+  function Screen(ctx) {
+    switch (ctx.state.ui.screen) {
+      case 'missions': return MissionsScreen(ctx);
+      case 'profile': return ProfileScreen(ctx);
+      case 'settings': return SettingsScreen(ctx);
+      case 'market': return Stub('שוק', '🛒', 'קנייה ומכירה של שטחים בין שחקנים — בקרוב.');
+      case 'friends': return Stub('חברים', '👥', 'רשימת חברים, דירוגים ושיתופים — בקרוב.');
+      case 'chat': return Stub('צ׳אט', '💬', 'צ׳אט גלובלי בין שחקנים — בקרוב.');
+      default: return Stub('בקרוב', '✨', 'מסך זה עדיין בפיתוח.');
+    }
+  }
+  function ScreenWrap(title, body) {
+    return h('div', { class: 'screen' }, h('h2', { class: 'screen__title' }, title), body);
+  }
+  function Stub(title, emoji, text) {
+    return ScreenWrap(title, h('div', { class: 'stub' }, h('div', { class: 'stub__emoji' }, emoji), h('p', { class: 'hint' }, text)));
+  }
+
+  function MissionsScreen(ctx) {
+    var st = ctx.state, P = ctx.P, d = ctx.dispatch;
+    var ms = P.missions(st);
+    return ScreenWrap('משימות יומיות',
+      h('div', { class: 'mission-list' }, ms.map(function (m) {
+        return h('div', { class: 'mission' },
+          h('div', { class: 'mission__main' },
+            h('div', { class: 'mission__title' }, m.title),
+            h('div', { class: 'mission__prog' }, m.current + '/' + m.target),
+            Bar(m.current / m.target)
+          ),
+          h('div', { class: 'mission__reward' },
+            h('span', { class: 'reward' }, '+' + m.reward + ' 💎'),
+            m.claimed
+              ? h('span', { class: 'mission__done' }, '✓')
+              : Button('קבל', function () { d({ type: 'CLAIM_MISSION', id: m.id }); }, { primary: m.done, disabled: !m.done })
+          )
+        );
+      }))
+    );
+  }
+
+  function ProfileScreen(ctx) {
+    var st = ctx.state, P = ctx.P, S = ctx.S;
+    var lvl = P.levelInfo(st);
+    return ScreenWrap('פרופיל',
+      h('div', { class: 'profile' },
+        h('div', { class: 'profile__head' },
+          Avatar(true),
+          h('div', { class: 'profile__head-info' },
+            h('div', { class: 'profile__name' }, 'הטריטוריה שלי'),
+            h('div', { class: 'profile__lvl' }, 'רמה ' + lvl.level + ' · ' + Math.round(lvl.progress * 100) + '%'),
+            Bar(lvl.progress)
+          )
+        ),
+        h('div', { class: 'stat-grid' },
+          StatCell('דירוג עולמי', '#' + P.rank(st)),
+          StatCell('ערך נטו', '🪙 ' + P.coinsLabel(st)),
+          StatCell('שטח', S.territorySize(st) + '')
+        ),
+        h('div', { class: 'section-title' }, 'הישגים'),
+        h('div', { class: 'badges' }, P.achievements(st).map(function (a) {
+          return h('div', { class: 'badge' + (a.unlocked ? '' : ' badge--locked') },
+            h('span', { class: 'badge__emoji' }, a.emoji), h('span', { class: 'badge__title' }, a.title));
+        }))
       )
     );
   }
 
-  function Panel(title, children) {
-    return h('aside', { class: 'panel' },
-      h('h2', { class: 'panel__title' }, title),
-      h('div', { class: 'panel__body' }, children)
+  function StatCell(label, value) {
+    return h('div', { class: 'stat-cell' }, h('span', { class: 'stat-cell__value' }, value), h('span', { class: 'stat-cell__label' }, label));
+  }
+
+  function SettingsScreen(ctx) {
+    var st = ctx.state, d = ctx.dispatch, dark = st.ui.theme === 'dark';
+    function Row(label, control) { return h('div', { class: 'set-row' }, h('span', {}, label), control); }
+    return ScreenWrap('הגדרות',
+      h('div', { class: 'settings' },
+        Row('מצב לילה 🌙', Button(dark ? 'פעיל' : 'כבוי', function () { d({ type: 'SET_THEME', theme: dark ? 'light' : 'dark' }); }, { primary: dark })),
+        Row('איפוס התקדמות', Button('אפס', function () {
+          if (typeof window !== 'undefined') { try { window.localStorage.removeItem('territory.save.v5'); } catch (e) {} window.location.reload(); }
+        }))
+      )
     );
   }
 
-  T.Components = { TopBar: TopBar, Controls: Controls, EditorPanel: EditorPanel };
+  T.Components = { TopBar: TopBar, BottomNav: BottomNav, MapOverlay: MapOverlay, Screen: Screen };
 })(window.Territory);

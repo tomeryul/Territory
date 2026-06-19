@@ -34,9 +34,14 @@ window.Territory = window.Territory || {};
       // מצלמה: מרכז (קואורדינטות עולם) + scale (פיקסלים למשבצת).
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
 
-      // מצב UI (חולף — לא נשמר).
+      // מטבע פרמיום והתקדמות משימות (נשמר).
+      meta: { gems: 0, claimedMissions: {} },
+
+      // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
         theme: 'dark',
+        screen: 'map',                       // מסך פעיל (ניווט תחתון)
+        editTab: 'color',                    // טאב בגיליון העריכה
         selection: null,
         multiSelect: { on: false, keys: [] },
       },
@@ -90,10 +95,34 @@ window.Territory = window.Territory || {};
           camera: { centerX: action.centerX, centerY: action.centerY, scale: action.scale },
         });
 
+      // ניווט בין מסכים (מפה/משימות/פרופיל/חברים/צ'אט/הגדרות).
+      case 'SET_SCREEN':
+        return Object.assign({}, state, {
+          ui: Object.assign({}, state.ui, { screen: action.screen }),
+        });
+
       case 'SELECT_TILE':
         return Object.assign({}, state, {
           ui: Object.assign({}, state.ui, { selection: { x: action.x, y: action.y } }),
         });
+      case 'CLEAR_SELECTION':
+        return Object.assign({}, state, {
+          ui: Object.assign({}, state.ui, { selection: null }),
+        });
+
+      // תביעת פרס משימה — רק אם הושלמה ולא נתבעה.
+      case 'CLAIM_MISSION': {
+        var ms = T.Progression.missions(state);
+        var m = null;
+        for (var i = 0; i < ms.length; i++) if (ms[i].id === action.id) m = ms[i];
+        if (!m || !m.done || m.claimed) return state;
+        var claimed = Object.assign({}, state.meta.claimedMissions); claimed[m.id] = true;
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, {
+            gems: state.meta.gems + m.reward, claimedMissions: claimed,
+          }),
+        });
+      }
 
       case 'TOGGLE_MULTISELECT': {
         var on = !state.ui.multiSelect.on;
@@ -120,6 +149,13 @@ window.Territory = window.Territory || {};
         return applyToOwned(state, action.keys, { color: action.color });
       case 'SET_TILE_IMAGE':
         return applyToOwned(state, action.keys, { imageUrl: action.imageUrl });
+      case 'SET_TILE_OPACITY':
+        return applyToOwned(state, action.keys, { opacity: action.opacity });
+
+      case 'SET_EDIT_TAB':
+        return Object.assign({}, state, {
+          ui: Object.assign({}, state.ui, { editTab: action.tab }),
+        });
 
       default:
         return state;

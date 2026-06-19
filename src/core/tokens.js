@@ -2,12 +2,8 @@
  * tokens.js — Design Tokens (מקור אמת יחיד לעיצוב)
  * ---------------------------------------------------------------------
  * [לוגיקה ניידת / PORTABLE LOGIC]
- * כל הצבעים/מרווחים/גדלים מרוכזים כאן. ה-CSS לא מגדיר ערכים קשיחים —
- * שכבת ה-UI (theme.js) מזריקה את הטוקנים האלה כ-CSS variables.
- * כך אותו אובייקט יעבור ל-ThemeProvider ב-React או ל-ThemeData ב-Flutter.
- *
- * שני נושאים (themes): 'light' ו-'dark'. מצב הלילה ('dark') שואף
- * לשחור-כמעט-מוחלט כדי להתאים לשהייה ארוכה מול המסך.
+ * סגנון: אפליקציית מובייל כהה עם אקסנט סגול, כרטיסים מעוגלים וזוהר עדין.
+ * מצב לילה ('dark') הוא ברירת המחדל; קיים גם 'light'.
  * ===================================================================== */
 
 window.Territory = window.Territory || {};
@@ -16,57 +12,59 @@ window.Territory = window.Territory || {};
   'use strict';
 
   T.Tokens = {
-    // צבעי המותג של השחקנים (קבועים בין הנושאים).
+    // צבעי טריטוריה/שחקנים (קבועים בין הנושאים).
     palette: {
-      brand: '#4f8cff',
-      red: '#e5484d',
-      green: '#30a46c',
-      purple: '#8e4ec6',
-      amber: '#f5a623',
+      brand: '#5b8cff',   // צבע הטריטוריה ההתחלתי (כחול זוהר)
+      red: '#e5484d', green: '#30a46c', purple: '#8b5cf6',
+      amber: '#f5a623', cyan: '#22d3ee', pink: '#ff6b9d', slate: '#94a3b8',
     },
 
-    // מרווחים אחידים (8pt-ish scale) — בפיקסלים.
     space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
-
-    // עיגול פינות.
-    radius: { sm: 6, md: 10, lg: 16, pill: 999 },
-
-    // גדלים.
+    radius: { sm: 8, md: 12, lg: 18, xl: 24, pill: 999 },
     size: { cell: 40, gap: 2 },
-
-    // טיפוגרפיה.
     font: { sm: 12, base: 14, lg: 18, xl: 22 },
 
-    // ערכי הנושאים. כל מפתח הופך ל-CSS variable (theme.js).
     themes: {
-      light: {
-        bg: '#f4f6f9',
-        surface: '#ffffff',
-        text: '#1a1d22',
-        muted: '#5b6470',
-        border: '#dde1e7',
-        gridLine: '#e6eaf0',
-        empty: '#eaeef3',
-        emptyOwnable: '#dbe7ff', // משבצת ריקה שאפשר לכבוש (צמודה)
-        accent: '#4f8cff',
-        accentText: '#ffffff',
-        danger: '#e5484d',
-        shadow: 'rgba(20, 28, 45, 0.10)',
-      },
-      // מצב לילה — הכי כהה שאפשר (שחור OLED), ניגודיות מרוככת לעיניים.
+      // מצב לילה — כהה עמוק עם אקסנט סגול וזוהר.
       dark: {
-        bg: '#000000',
-        surface: '#0a0b0d',
-        text: '#c7ccd4',
-        muted: '#6b7280',
-        border: '#16181d',
-        gridLine: '#0e1014',
-        empty: '#0b0c0f',
-        emptyOwnable: '#10243f',
-        accent: '#3b6fd4',
-        accentText: '#eaf0ff',
-        danger: '#b93b3f',
-        shadow: 'rgba(0, 0, 0, 0.65)',
+        bg: '#08080f',
+        bgElev: '#0e0e1a',
+        surface: '#15151f',
+        surface2: '#1c1c2b',
+        text: '#eceef6',
+        muted: '#8b8fa6',
+        border: '#262636',
+        gridLine: 'rgba(120,130,200,0.10)',
+        empty: '#0f0f1c',
+        accent: '#8b5cf6',
+        accent2: '#6d4ad6',
+        accentText: '#ffffff',
+        glow: 'rgba(139,92,246,0.45)',
+        gem: '#7cc4ff',
+        coin: '#f5b942',
+        danger: '#e5484d',
+        shadow: 'rgba(0,0,0,0.6)',
+        star: 'rgba(180,190,230,0.55)',
+      },
+      light: {
+        bg: '#eef0f6',
+        bgElev: '#ffffff',
+        surface: '#ffffff',
+        surface2: '#f4f5fb',
+        text: '#1a1d2b',
+        muted: '#6b7180',
+        border: '#dfe2ec',
+        gridLine: 'rgba(80,90,160,0.12)',
+        empty: '#e7eaf3',
+        accent: '#7c3aed',
+        accent2: '#6d28d9',
+        accentText: '#ffffff',
+        glow: 'rgba(124,58,237,0.30)',
+        gem: '#2b8cff',
+        coin: '#e0972a',
+        danger: '#e5484d',
+        shadow: 'rgba(40,40,80,0.12)',
+        star: 'rgba(120,130,180,0.35)',
       },
     },
   };

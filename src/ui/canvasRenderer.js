@@ -65,6 +65,7 @@ window.Territory = window.Territory || {};
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, W, H);
+      drawStars(W, H, phase, pal.star);
       var wr = scene.worldRect;
       var rx = Math.max(0, wr.x), ry = Math.max(0, wr.y);
       var rw = Math.min(W, wr.x + wr.w) - rx, rh = Math.min(H, wr.y + wr.h) - ry;
@@ -83,7 +84,7 @@ window.Territory = window.Territory || {};
         zones.forEach(function (z) { flat(z, (ZT[z.type] || {}).color || '#666'); });
       }
 
-      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale); });
+      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale, pal); });
 
       scene.multi.forEach(function (m) { outline(m, pal.accent, Math.max(2, scale * 0.12)); });
       if (scene.selection) outline(scene.selection, '#ffffff', Math.max(2, scale * 0.12));
@@ -111,18 +112,52 @@ window.Territory = window.Territory || {};
       ctx.stroke();
     }
 
-    function drawOwnedTile(t, size) {
+    // כוכבים ברקע (starfield) — backdrop קבוע למסך, מנצנץ בזמן אנימציה.
+    function drawStars(W, H, phase, color) {
+      if (!color) return;
+      var step = 46;
+      for (var gx = 0; gx < W; gx += step) {
+        for (var gy = 0; gy < H; gy += step) {
+          var s = rnd((gx * 92837 + 1) ^ (gy * 689287 + 7));
+          if (s < 0.55) continue;
+          var px = gx + s * step, py = gy + rnd(gx + gy * 3) * step;
+          var tw = 0.5 + 0.5 * Math.sin(phase * 2 + s * 12);
+          ctx.globalAlpha = tw * (s - 0.5) * 1.6;
+          ctx.fillStyle = color;
+          ctx.fillRect(px, py, s > 0.92 ? 2 : 1, s > 0.92 ? 2 : 1);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // משבצת בבעלות — מראה "פיקסל" זוהר עם בליטה (bevel) וזוהר עדין.
+    function drawOwnedTile(t, size, pal) {
+      ctx.globalAlpha = t.opacity == null ? 1 : t.opacity;
+      var glow = size >= 16;
+      if (glow) { ctx.shadowColor = pal.glow; ctx.shadowBlur = size * 0.35; }
+
       if (t.imageUrl) {
         var rec = getImg(t.imageUrl);
         if (rec.ready) {
           ctx.save(); ctx.beginPath(); ctx.rect(t.sx, t.sy, size, size); ctx.clip();
           ctx.drawImage(rec.img, t.sx, t.sy, size, size); ctx.restore();
-        } else { ctx.fillStyle = t.color || '#888'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
-      } else { ctx.fillStyle = t.color || '#888'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
-      if (size >= 18) {
-        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+        } else { ctx.fillStyle = t.color || '#5b8cff'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
+      } else { ctx.fillStyle = t.color || '#5b8cff'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
+      ctx.shadowBlur = 0;
+
+      if (size >= 12 && !t.imageUrl) {
+        // בליטת פיקסל: הדגשה עליונה-שמאלית וצל תחתון-ימני.
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(t.sx, t.sy, size, Math.max(1, size * 0.12));
+        ctx.fillRect(t.sx, t.sy, Math.max(1, size * 0.12), size);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(t.sx, t.sy + size - Math.max(1, size * 0.12), size, Math.max(1, size * 0.12));
+      }
+      if (size >= 14) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
         ctx.strokeRect(t.sx + 0.5, t.sy + 0.5, size - 1, size - 1);
       }
+      ctx.globalAlpha = 1;
     }
 
     /* ---- מפת ציור לפי סוג אזור ---- */
