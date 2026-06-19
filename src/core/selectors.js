@@ -1,9 +1,9 @@
 /* =====================================================================
- * selectors.js — נתונים נגזרים (Derived data)
+ * selectors.js — נתונים נגזרים (Derived data), טהורים
  * ---------------------------------------------------------------------
  * [לוגיקה ניידת / PORTABLE LOGIC]
- * פונקציות טהורות שמחשבות תצוגות-ביניים מתוך ה-state, *בלי DOM*.
- * שכבת ה-UI מקבלת מכאן "נתונים מוכנים לרינדור" ולא מחשבת בעצמה.
+ * מחשב "נתונים מוכנים לציור" מתוך ה-state, בלי DOM. שכבת ה-canvas רק
+ * מציירת את מה שמחזירים כאן — היא לא מחשבת גאומטריה או חוקים בעצמה.
  * ===================================================================== */
 
 window.Territory = window.Territory || {};
@@ -14,112 +14,123 @@ window.Territory = window.Territory || {};
   var Config = T.Config;
   var L = T.Logic;
 
-  // הקרדיט הזמין כרגע (זמן פעיל פחות הוצאות).
-  function credits(state) {
-    return T.availableCredits(state);
-  }
-
-  // כמות המשבצות שבבעלות השחקן (גודל הטריטוריה).
   function territorySize(state) {
     var n = 0;
-    for (var k in state.tiles) {
-      if (state.tiles[k].ownerId === state.currentUserId) n++;
-    }
+    for (var k in state.tiles) if (state.tiles[k].ownerId === state.currentUserId) n++;
     return n;
   }
 
-  // זמן פעיל בפורמט קריא (mm:ss).
   function activeTimeLabel(state) {
-    var totalSec = Math.floor(state.session.activeMs / 1000);
-    var m = Math.floor(totalSec / 60);
-    var s = totalSec % 60;
+    var sec = Math.floor(state.session.activeMs / 1000);
+    var m = Math.floor(sec / 60), s = sec % 60;
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // סוג האזור (ים/עיר/רכבת) במשבצת, או null.
-  function zoneTypeAt(state, x, y) {
-    return (state.zones && state.zones[L.key(x, y)]) || null;
+  // שניות עד המשבצת הבאה (טיימר לתצוגה).
+  function nextTileLabel(state) {
+    return Math.ceil(L.msToNextTile(state.session.activeMs) / 1000) + 'ש׳';
   }
 
-  // המשבצת הנבחרת (אובייקט מלא, מידע על אזור, או משבצת ריקה).
   function selectedTile(state) {
     var sel = state.ui.selection;
     if (!sel) return null;
     var k = L.key(sel.x, sel.y);
     var tile = state.tiles[k];
     if (tile) return Object.assign({ zone: null }, tile);
-    var zType = zoneTypeAt(state, sel.x, sel.y);
-    // משבצת ריקה / אזור — מחזירים "stub" עם מטא-מידע לפעולה.
+    var zType = (state.zones && state.zones[k]) || null;
     return {
       x: sel.x, y: sel.y, ownerId: null, color: null, imageUrl: null,
-      zone: zType,
-      zoneInfo: zType ? state.zonesInfo[zType] : null,
+      zone: zType, zoneInfo: zType ? state.zonesInfo[zType] : null,
     };
   }
 
-  // החלון הנראה כמטריצה דו-ממדית של "תאים מוכנים לרינדור".
-  // כל תא כולל את כל מה שה-UI צריך — ה-UI רק מצייר, לא מחליט.
-  function viewportTiles(state) {
-    var cols = state.viewport.cols || Config.viewport.cols;
-    var rows = state.viewport.rows || Config.viewport.rows;
-    var originX = state.viewport.centerX - Math.floor(cols / 2);
-    var originY = state.viewport.centerY - Math.floor(rows / 2);
-    var meId = state.currentUserId;
-    var avail = credits(state);
-    var selKey = state.ui.selection ? L.key(state.ui.selection.x, state.ui.selection.y) : null;
-    var multi = state.ui.multiSelect;
-
-    var grid = [];
-    for (var r = 0; r < rows; r++) {
-      var row = [];
-      for (var c = 0; c < cols; c++) {
-        var x = originX + c;
-        var y = originY + r;
-        var k = L.key(x, y);
-        var tile = state.tiles[k] || null;
-        var inside = L.inWorld(x, y);
-        var mine = !!tile && tile.ownerId === meId;
-
-        // אזור (ים/עיר/רכבת) — כולל דגלי-חיבור לשכנים מאותו סוג, כדי
-        // שה-UI יוכל לצייר את האזור כצורה אחת רציפה עם פינות מעוגלות.
-        var zType = zoneTypeAt(state, x, y);
-        var zone = null;
-        if (zType) {
-          zone = {
-            type: zType,
-            info: state.zonesInfo[zType],
-            anchor: state.zoneAnchors && state.zoneAnchors[k] === zType,
-            up: zoneTypeAt(state, x, y - 1) === zType,
-            down: zoneTypeAt(state, x, y + 1) === zType,
-            left: zoneTypeAt(state, x - 1, y) === zType,
-            right: zoneTypeAt(state, x + 1, y) === zType,
-          };
-        }
-
-        row.push({
-          x: x, y: y, key: k,
-          inside: inside,
-          tile: tile, // null אם ריקה
-          mine: mine,
-          ownerColor: tile ? tile.color : null,
-          imageUrl: tile ? tile.imageUrl : null,
-          zone: zone, // null אם לא אזור
-          // דגלי-פעולה מחושבים מראש (ה-UI לא מחשב חוקים):
-          claimable: inside && !tile && L.canClaim(state, avail, x, y),
-          selected: k === selKey,
-          inMulti: multi.on && multi.keys.indexOf(k) >= 0,
-        });
-      }
-      grid.push(row);
+  // תיבת-תוחמת לכל סוג אזור (לצורך אנימציות גלובליות כמו רכבת נעה).
+  function zoneBounds(state) {
+    var b = {};
+    for (var k in state.zones) {
+      var type = state.zones[k];
+      var p = L.parseKey(k);
+      var z = b[type] || (b[type] = { minX: p.x, maxX: p.x, minY: p.y, maxY: p.y });
+      if (p.x < z.minX) z.minX = p.x; if (p.x > z.maxX) z.maxX = p.x;
+      if (p.y < z.minY) z.minY = p.y; if (p.y > z.maxY) z.maxY = p.y;
     }
-    return { grid: grid, originX: originX, originY: originY };
+    return b;
+  }
+
+  /* ---- scene: כל מה שצריך לצייר פריים, ביחידות מסך ------------------ */
+  // מקבל את ממדי ה-canvas (CSS px). מחזיר רשימות מוכנות-לציור.
+  function scene(state, viewW, viewH) {
+    var cam = state.camera;
+    var scale = cam.scale;
+    var rng = L.visibleRange(cam, viewW, viewH);
+    var meId = state.currentUserId;
+
+    function sx(wx) { return L.worldToScreenX(cam, viewW, wx); }
+    function sy(wy) { return L.worldToScreenY(cam, viewH, wy); }
+    function inView(x, y) { return x >= rng.minX && x <= rng.maxX && y >= rng.minY && y <= rng.maxY; }
+
+    // אזורים נראים (sparse — מעט ערכים).
+    var zones = [];
+    for (var zk in state.zones) {
+      var zp = L.parseKey(zk);
+      if (!inView(zp.x, zp.y)) continue;
+      var type = state.zones[zk];
+      zones.push({
+        x: zp.x, y: zp.y, sx: sx(zp.x), sy: sy(zp.y), size: scale, type: type,
+        anchor: state.zoneAnchors[zk] === type,
+        info: state.zonesInfo[type],
+      });
+    }
+
+    // משבצות בבעלות נראות.
+    var tiles = [];
+    for (var tk in state.tiles) {
+      var t = state.tiles[tk];
+      if (t.ownerId !== meId) continue;
+      if (!inView(t.x, t.y)) continue;
+      tiles.push({
+        x: t.x, y: t.y, sx: sx(t.x), sy: sy(t.y), size: scale,
+        color: t.color, imageUrl: t.imageUrl,
+      });
+    }
+
+    // בחירה בודדת + בחירה מרובה (מסגרות הדגשה).
+    var selection = null;
+    if (state.ui.selection) {
+      var s = state.ui.selection;
+      selection = { sx: sx(s.x), sy: sy(s.y), size: scale };
+    }
+    var multi = [];
+    if (state.ui.multiSelect.on) {
+      state.ui.multiSelect.keys.forEach(function (mk) {
+        var mp = L.parseKey(mk);
+        if (inView(mp.x, mp.y)) multi.push({ sx: sx(mp.x), sy: sy(mp.y), size: scale });
+      });
+    }
+
+    return {
+      scale: scale,
+      detail: scale >= Config.camera.detailScale, // לצייר פירוט + אנימציה
+      showGrid: scale >= Config.camera.gridScale,
+      view: { w: viewW, h: viewH },
+      // מלבן העולם במסך (לרקע ולגבול).
+      worldRect: { x: sx(0), y: sy(0), w: state.world.width * scale, h: state.world.height * scale },
+      range: rng,
+      origin: { x: sx(rng.minX), y: sy(rng.minY) },
+      zones: zones,
+      zoneBounds: zoneBounds(state),
+      sx0: sx(0), sy0: sy(0), // נקודת עיגון להמרת world->screen בתוך הרנדרר
+      tiles: tiles,
+      selection: selection,
+      multi: multi,
+    };
   }
 
   T.Selectors = {
-    credits: credits,
     territorySize: territorySize,
     activeTimeLabel: activeTimeLabel,
+    nextTileLabel: nextTileLabel,
     selectedTile: selectedTile,
-    viewportTiles: viewportTiles,
+    scene: scene,
   };
 })(window.Territory);

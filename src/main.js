@@ -9,17 +9,14 @@
 (function (T) {
   'use strict';
 
-  var STORAGE_KEY = 'territory.save.v2';
+  var STORAGE_KEY = 'territory.save.v3';
 
-  // ----- חלקי ה-state שכן נשמרים (החלקים החולפים של ה-UI לא נשמרים) -----
+  // ----- חלקי ה-state שכן נשמרים (האזורים נזרעים מחדש, לא נשמרים) -----
   function persistable(state) {
     return {
-      users: state.users,
       tiles: state.tiles,
       session: state.session,
-      economy: state.economy,
-      // נשמר רק מרכז התצוגה; cols/rows מחושבים מחדש לפי המסך בכל מכשיר.
-      viewport: { centerX: state.viewport.centerX, centerY: state.viewport.centerY },
+      camera: state.camera,
       theme: state.ui.theme,
     };
   }
@@ -27,18 +24,12 @@
   // ----- מיזוג state שמור (אם קיים) אל המצב ההתחלתי הטרי -----
   function loadState() {
     var initial = T.createInitialState();
-    var saved = T.Storage.getJSON(STORAGE_KEY); // אבסטרקציית platform
+    var saved = T.Storage.getJSON(STORAGE_KEY);
     if (!saved) return initial;
     return Object.assign({}, initial, {
-      users: saved.users || initial.users,
       tiles: saved.tiles || initial.tiles,
       session: saved.session || initial.session,
-      economy: saved.economy || initial.economy,
-      // משמרים את ברירות המחדל של cols/rows ומחילים רק את המרכז השמור.
-      viewport: Object.assign({}, initial.viewport, {
-        centerX: (saved.viewport && saved.viewport.centerX) || initial.viewport.centerX,
-        centerY: (saved.viewport && saved.viewport.centerY) || initial.viewport.centerY,
-      }),
+      camera: saved.camera || initial.camera,
       ui: Object.assign({}, initial.ui, { theme: saved.theme || initial.ui.theme }),
     });
   }
