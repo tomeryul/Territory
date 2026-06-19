@@ -19,11 +19,19 @@ window.Territory = window.Territory || {};
 
   T.Avatars = {
     list: [
+      // דמויות מונפשות (3 פוזות כל אחת) — נחתכו מגיליון הדמויות.
+      { id: 'shiba', name: 'שיבא הקוסם', fps: 4,
+        frames: ['assets/avatars/shiba_1.png', 'assets/avatars/shiba_2.png', 'assets/avatars/shiba_3.png'] },
+      { id: 'wizardcat', name: 'חתול מכשף', fps: 4,
+        frames: ['assets/avatars/wizardcat_1.png', 'assets/avatars/wizardcat_2.png', 'assets/avatars/wizardcat_3.png'] },
+      { id: 'cyberdog', name: 'כלב סייבר', fps: 4,
+        frames: ['assets/avatars/cyberdog_1.png', 'assets/avatars/cyberdog_2.png', 'assets/avatars/cyberdog_3.png'] },
+      { id: 'kingcat', name: 'חתול מלך', fps: 4,
+        frames: ['assets/avatars/kingcat_1.png', 'assets/avatars/kingcat_2.png', 'assets/avatars/kingcat_3.png'] },
+      // אווטארי אימוג'י (גיבוי / בחירה מהירה).
       { id: 'default', name: 'חתול', emoji: '🐱', frames: [] },
       { id: 'fox', name: 'שועל', emoji: '🦊', frames: [] },
       { id: 'robot', name: 'רובוט', emoji: '🤖', frames: [] },
-      { id: 'alien', name: 'חייזר', emoji: '👾', frames: [] },
-      // ⬇️ דמויות מונפשות מתמונות יתווספו כאן (frames + fps).
     ],
   };
 
