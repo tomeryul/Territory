@@ -19,6 +19,10 @@ window.Territory = window.Territory || {};
 
   T.Avatars = {
     list: [
+      // דמות מלאה מונפשת (5 פוזות) — חתול-מכשף בפיקסל-ארט, רקע שקוף.
+      { id: 'wizard', name: 'חתול מכשף', fps: 5,
+        frames: ['assets/avatars/wizard_1.png', 'assets/avatars/wizard_2.png', 'assets/avatars/wizard_3.png',
+                 'assets/avatars/wizard_4.png', 'assets/avatars/wizard_5.png'] },
       // דמויות מונפשות (3 פוזות כל אחת) — נחתכו מגיליון הדמויות.
       { id: 'shiba', name: 'שיבא הקוסם', fps: 4,
         frames: ['assets/avatars/shiba_1.png', 'assets/avatars/shiba_2.png', 'assets/avatars/shiba_3.png'] },

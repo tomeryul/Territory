@@ -35,7 +35,7 @@ window.Territory = window.Territory || {};
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
 
       // מטבע פרמיום, התקדמות משימות, ובחירת אווטאר (נשמר).
-      meta: { gems: 0, claimedMissions: {}, avatarId: 'shiba', customAvatar: null },
+      meta: { gems: 0, claimedMissions: {}, avatarId: 'wizard', customAvatar: null },
 
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
