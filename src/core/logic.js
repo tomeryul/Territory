@@ -18,6 +18,14 @@ window.Territory = window.Territory || {};
   function inWorld(x, y) { return x >= 0 && y >= 0 && x < Config.world.width && y < Config.world.height; }
   function neighbors(x, y) { return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]; }
 
+  // מסכת 8 שכנים בבעלות אותו שחקן (ל-autotiling: בחירת חלק הטייל הנכון).
+  // סדר הביטים: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128.
+  function neighborMask8(tiles, ownerId, x, y) {
+    function own(nx, ny) { var t = tiles[key(nx, ny)]; return t && t.ownerId === ownerId ? 1 : 0; }
+    return own(x, y - 1) * 1 + own(x + 1, y - 1) * 2 + own(x + 1, y) * 4 + own(x + 1, y + 1) * 8 +
+           own(x, y + 1) * 16 + own(x - 1, y + 1) * 32 + own(x - 1, y) * 64 + own(x - 1, y - 1) * 128;
+  }
+
   // מפתח תא באינדקס המרחבי (bucket) — לאיסוף מהיר של אזורים נראים.
   function bucketKey(x, y) {
     return Math.floor(x / Config.bucket) + ',' + Math.floor(y / Config.bucket);
@@ -194,7 +202,7 @@ window.Territory = window.Territory || {};
   }
 
   T.Logic = {
-    key: key, parseKey: parseKey, inWorld: inWorld, neighbors: neighbors, bucketKey: bucketKey,
+    key: key, parseKey: parseKey, inWorld: inWorld, neighbors: neighbors, neighborMask8: neighborMask8, bucketKey: bucketKey,
     costFor: costFor, nextGrowthTile: nextGrowthTile,
     worldToScreenX: worldToScreenX, worldToScreenY: worldToScreenY,
     screenToWorldX: screenToWorldX, screenToWorldY: screenToWorldY,
