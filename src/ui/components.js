@@ -43,7 +43,7 @@ window.Territory = window.Territory || {};
       ),
       h('div', { class: 'stats' },
         Stat('שטח', String(S.territorySize(state))),
-        Stat('זמן', S.activeTimeLabel(state)),
+        Stat('שווי תיק', '₪' + S.formatValue(S.portfolioValue(state))),
         Stat('משבצת הבאה', S.nextTileLabel(state))
       ),
       Button(isDark ? '☀️' : '🌙', function () {
@@ -99,7 +99,8 @@ window.Territory = window.Territory || {};
     var sel = S.selectedTile(state);
     if (!sel) {
       return Panel('הטריטוריה שלך', [
-        h('p', { class: 'hint' }, 'המשבצות מתווספות אוטומטית ככל שנשארים באפליקציה. גוררים להזזת המפה, צובטים/גלגל לזום. נגיעה במשבצת שלך — לעריכה.'),
+        h('p', { class: 'hint' }, 'המשבצות מתווספות אוטומטית ככל שנשארים באפליקציה — משחק איטי של בנייה והשקעה לטווח ארוך. גוררים להזזת המפה, צובטים/גלגל לזום.'),
+        h('p', { class: 'hint' }, '💡 טיפ: שווי התיק עולה כשהטריטוריה צמודה לאזורים בעלי-ערך (עיר, תשתית, מים). מיקום שווה כסף.'),
       ]);
     }
 
@@ -107,12 +108,19 @@ window.Territory = window.Territory || {};
     var coordLine = h('div', { class: 'panel__coord' }, 'משבצת ', h('strong', {}, sel.x + ', ' + sel.y));
 
     if (sel.ownerId === state.currentUserId) {
-      return Panel('המשבצת שלי', [coordLine, ColorEditor([key], ctx), ImageEditor([key], ctx, sel.imageUrl)]);
+      return Panel('המשבצת שלי', [
+        coordLine,
+        h('div', { class: 'value-badge' }, 'שווי משוער: ₪' + sel.value),
+        ColorEditor([key], ctx),
+        ImageEditor([key], ctx, sel.imageUrl),
+      ]);
     }
     if (sel.zone) {
-      return Panel('אזור: ' + sel.zoneInfo.name + ' ' + sel.zoneInfo.emoji, [
+      return Panel(sel.zoneInfo.emoji + ' ' + sel.zoneInfo.name, [
         coordLine,
-        h('p', { class: 'hint' }, 'אזור מיוחד בנוף — לא ניתן לכבוש אותו. הטריטוריה גדלה סביבו.'),
+        h('div', { class: 'value-badge' }, 'ערך קרקע: ₪' + sel.zoneInfo.value),
+        h('p', { class: 'lesson' }, h('strong', {}, '📈 שיעור השקעה: '), sel.zoneInfo.lesson),
+        h('p', { class: 'hint' }, 'אזור זה חלק מהנוף ולא ניתן לכבוש אותו — אך כדאי להתרחב לידו כדי להעלות את שווי התיק.'),
       ]);
     }
     return Panel('משבצת פנויה', [

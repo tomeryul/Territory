@@ -2,8 +2,8 @@
  * selectors.js — נתונים נגזרים (Derived data), טהורים
  * ---------------------------------------------------------------------
  * [לוגיקה ניידת / PORTABLE LOGIC]
- * מחשב "נתונים מוכנים לציור" מתוך ה-state, בלי DOM. שכבת ה-canvas רק
- * מציירת את מה שמחזירים כאן — היא לא מחשבת גאומטריה או חוקים בעצמה.
+ * מחשב "נתונים מוכנים לציור/תצוגה" מתוך ה-state, בלי DOM. כולל את
+ * scene() (מה לצייר בכל פריים, דרך אינדקס מרחבי) ואת מנגנון השווי.
  * ===================================================================== */
 
 window.Territory = window.Territory || {};
@@ -14,11 +14,12 @@ window.Territory = window.Territory || {};
   var Config = T.Config;
   var L = T.Logic;
 
-  function territorySize(state) {
+  function ownedCount(state) {
     var n = 0;
     for (var k in state.tiles) if (state.tiles[k].ownerId === state.currentUserId) n++;
     return n;
   }
+  function territorySize(state) { return ownedCount(state); }
 
   function activeTimeLabel(state) {
     var sec = Math.floor(state.session.activeMs / 1000);
@@ -26,17 +27,40 @@ window.Territory = window.Territory || {};
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // שניות עד המשבצת הבאה (טיימר לתצוגה).
+  // שניות עד המשבצת הבאה (לפי מודל העלות המואט).
   function nextTileLabel(state) {
-    return Math.ceil(L.msToNextTile(state.session.activeMs) / 1000) + 'ש׳';
+    var cost = L.costFor(ownedCount(state));
+    var remain = Math.max(0, cost - state.session.growthMs);
+    return Math.ceil(remain / 1000) + 'ש׳';
   }
+
+  /* ---- שווי: משבצת שווה יותר ככל שצמודה לאזורים בעלי-ערך ----------- */
+  // מלמד "מיקום": קרבה לעיר/תשתית/מים מעלה ערך — כמו נדל"ן אמיתי.
+  function tileValue(state, x, y) {
+    var v = 1; // ערך בסיס לכל קרקע
+    var nb = L.neighbors(x, y);
+    for (var i = 0; i < nb.length; i++) {
+      var zt = state.zones[L.key(nb[i][0], nb[i][1])];
+      if (zt && state.zonesInfo[zt]) v += state.zonesInfo[zt].value;
+    }
+    return v;
+  }
+  function portfolioValue(state) {
+    var sum = 0;
+    for (var k in state.tiles) {
+      var t = state.tiles[k];
+      if (t.ownerId === state.currentUserId) sum += tileValue(state, t.x, t.y);
+    }
+    return sum;
+  }
+  function formatValue(v) { return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v); }
 
   function selectedTile(state) {
     var sel = state.ui.selection;
     if (!sel) return null;
     var k = L.key(sel.x, sel.y);
     var tile = state.tiles[k];
-    if (tile) return Object.assign({ zone: null }, tile);
+    if (tile) return Object.assign({ zone: null, value: tileValue(state, sel.x, sel.y) }, tile);
     var zType = (state.zones && state.zones[k]) || null;
     return {
       x: sel.x, y: sel.y, ownerId: null, color: null, imageUrl: null,
@@ -44,62 +68,50 @@ window.Territory = window.Territory || {};
     };
   }
 
-  // תיבת-תוחמת לכל סוג אזור (לצורך אנימציות גלובליות כמו רכבת נעה).
-  function zoneBounds(state) {
-    var b = {};
-    for (var k in state.zones) {
-      var type = state.zones[k];
-      var p = L.parseKey(k);
-      var z = b[type] || (b[type] = { minX: p.x, maxX: p.x, minY: p.y, maxY: p.y });
-      if (p.x < z.minX) z.minX = p.x; if (p.x > z.maxX) z.maxX = p.x;
-      if (p.y < z.minY) z.minY = p.y; if (p.y > z.maxY) z.maxY = p.y;
-    }
-    return b;
-  }
-
   /* ---- scene: כל מה שצריך לצייר פריים, ביחידות מסך ------------------ */
-  // מקבל את ממדי ה-canvas (CSS px). מחזיר רשימות מוכנות-לציור.
   function scene(state, viewW, viewH) {
-    var cam = state.camera;
-    var scale = cam.scale;
+    var cam = state.camera, scale = cam.scale;
     var rng = L.visibleRange(cam, viewW, viewH);
     var meId = state.currentUserId;
+    var BS = Config.bucket;
 
     function sx(wx) { return L.worldToScreenX(cam, viewW, wx); }
     function sy(wy) { return L.worldToScreenY(cam, viewH, wy); }
     function inView(x, y) { return x >= rng.minX && x <= rng.maxX && y >= rng.minY && y <= rng.maxY; }
 
-    // אזורים נראים (sparse — מעט ערכים).
+    // אזורים נראים — דרך האינדקס המרחבי (סורקים רק דליים סמוכים).
     var zones = [];
-    for (var zk in state.zones) {
-      var zp = L.parseKey(zk);
-      if (!inView(zp.x, zp.y)) continue;
-      var type = state.zones[zk];
-      zones.push({
-        x: zp.x, y: zp.y, sx: sx(zp.x), sy: sy(zp.y), size: scale, type: type,
-        anchor: state.zoneAnchors[zk] === type,
-        info: state.zonesInfo[type],
-      });
+    for (var bx = Math.floor(rng.minX / BS); bx <= Math.floor(rng.maxX / BS); bx++) {
+      for (var by = Math.floor(rng.minY / BS); by <= Math.floor(rng.maxY / BS); by++) {
+        var arr = state.zoneBuckets[bx + ',' + by];
+        if (!arr) continue;
+        for (var i = 0; i < arr.length; i++) {
+          var c = arr[i];
+          if (!inView(c.x, c.y)) continue;
+          zones.push({ x: c.x, y: c.y, sx: sx(c.x), sy: sy(c.y), size: scale, type: c.type, anchor: c.anchor, info: state.zonesInfo[c.type] });
+        }
+      }
+    }
+
+    // אזורי רכבת נראים (לציור רכבת נעה לכל קו).
+    var rails = [];
+    for (var r = 0; r < state.regions.length; r++) {
+      var rg = state.regions[r];
+      if (rg.type !== 'rail') continue;
+      if (rg.maxX < rng.minX || rg.minX > rng.maxX || rg.maxY < rng.minY || rg.minY > rng.maxY) continue;
+      rails.push({ minX: rg.minX, maxX: rg.maxX, minY: rg.minY, maxY: rg.maxY, horiz: rg.horiz });
     }
 
     // משבצות בבעלות נראות.
     var tiles = [];
     for (var tk in state.tiles) {
       var t = state.tiles[tk];
-      if (t.ownerId !== meId) continue;
-      if (!inView(t.x, t.y)) continue;
-      tiles.push({
-        x: t.x, y: t.y, sx: sx(t.x), sy: sy(t.y), size: scale,
-        color: t.color, imageUrl: t.imageUrl,
-      });
+      if (t.ownerId !== meId || !inView(t.x, t.y)) continue;
+      tiles.push({ x: t.x, y: t.y, sx: sx(t.x), sy: sy(t.y), size: scale, color: t.color, imageUrl: t.imageUrl });
     }
 
-    // בחירה בודדת + בחירה מרובה (מסגרות הדגשה).
     var selection = null;
-    if (state.ui.selection) {
-      var s = state.ui.selection;
-      selection = { sx: sx(s.x), sy: sy(s.y), size: scale };
-    }
+    if (state.ui.selection) selection = { sx: sx(state.ui.selection.x), sy: sy(state.ui.selection.y), size: scale };
     var multi = [];
     if (state.ui.multiSelect.on) {
       state.ui.multiSelect.keys.forEach(function (mk) {
@@ -108,21 +120,19 @@ window.Territory = window.Territory || {};
       });
     }
 
+    var detail = scale >= Config.camera.detailScale;
+    var animatedTypes = { sea: 1, lake: 1, city: 1, factory: 1, rail: 1 };
+    var animated = detail && (rails.length > 0 || zones.some(function (z) { return animatedTypes[z.type]; }));
+
     return {
       scale: scale,
-      detail: scale >= Config.camera.detailScale, // לצייר פירוט + אנימציה
+      detail: detail,
+      animated: animated,
       showGrid: scale >= Config.camera.gridScale,
       view: { w: viewW, h: viewH },
-      // מלבן העולם במסך (לרקע ולגבול).
       worldRect: { x: sx(0), y: sy(0), w: state.world.width * scale, h: state.world.height * scale },
-      range: rng,
-      origin: { x: sx(rng.minX), y: sy(rng.minY) },
-      zones: zones,
-      zoneBounds: zoneBounds(state),
-      sx0: sx(0), sy0: sy(0), // נקודת עיגון להמרת world->screen בתוך הרנדרר
-      tiles: tiles,
-      selection: selection,
-      multi: multi,
+      range: rng, sx0: sx(0), sy0: sy(0),
+      zones: zones, rails: rails, tiles: tiles, selection: selection, multi: multi,
     };
   }
 
@@ -130,6 +140,9 @@ window.Territory = window.Territory || {};
     territorySize: territorySize,
     activeTimeLabel: activeTimeLabel,
     nextTileLabel: nextTileLabel,
+    portfolioValue: portfolioValue,
+    formatValue: formatValue,
+    tileValue: tileValue,
     selectedTile: selectedTile,
     scene: scene,
   };

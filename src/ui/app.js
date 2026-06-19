@@ -85,7 +85,7 @@ window.Territory = window.Territory || {};
       if (s.w < 2 || s.h < 2) return;
       var scene = T.Selectors.scene(renderState(), s.w, s.h);
       renderer.draw(scene, phase, palette(), dpr);
-      if (scene.detail && scene.zones.length > 0 && !rafId) rafId = requestAnimationFrame(animLoop);
+      if (scene.animated && !rafId) rafId = requestAnimationFrame(animLoop);
     }
     function animLoop(ts) {
       phase = ts / 1000;
@@ -93,7 +93,7 @@ window.Territory = window.Territory || {};
       if (s.w < 2 || s.h < 2) { rafId = null; return; }
       var scene = T.Selectors.scene(renderState(), s.w, s.h);
       renderer.draw(scene, phase, palette(), dpr);
-      rafId = (scene.detail && scene.zones.length > 0) ? requestAnimationFrame(animLoop) : null;
+      rafId = (scene.animated) ? requestAnimationFrame(animLoop) : null;
     }
 
     /* ---- מחוות מגע/עכבר ---- */

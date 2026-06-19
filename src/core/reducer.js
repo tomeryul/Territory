@@ -25,9 +25,11 @@ window.Territory = window.Territory || {};
       zones: world.zones,           // sparse: אזורים מיוחדים (נוף)
       zonesInfo: world.zonesInfo,
       zoneAnchors: world.zoneAnchors,
+      regions: world.regions,       // רשימת אזורים עם גבולות (לאנימציות)
+      zoneBuckets: world.zoneBuckets, // אינדקס מרחבי לציור מהיר
 
-      // זמן פעיל מצטבר — מניע את הגידול האוטומטי.
-      session: { activeMs: 0 },
+      // זמן פעיל מצטבר + מד-התקדמות לגידול (נצרך לכל משבצת חדשה).
+      session: { activeMs: 0, growthMs: 0 },
 
       // מצלמה: מרכז (קואורדינטות עולם) + scale (פיקסלים למשבצת).
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
@@ -41,41 +43,41 @@ window.Territory = window.Territory || {};
     };
   };
 
-  /* ---- גידול אוטומטי: מוסיף משבצות עד שמגיעים ליעד לפי הזמן --------- */
-  function applyGrowth(state) {
-    var target = L.growthTarget(state.session.activeMs);
+  /* ---- גידול אוטומטי מואט: צוברים growthMs ו"קונים" משבצות ---------- */
+  // עלות כל משבצת גדלה עם גודל הטריטוריה (costFor) — כך הבנייה איטית
+  // ומתעצמת בהדרגה, כמו פיתוח תיק נכסים.
+  function applyGrowth(state, addedMs) {
     var owned = 0;
     for (var k in state.tiles) if (state.tiles[k].ownerId === state.currentUserId) owned++;
-    if (owned >= target) return state;
 
-    // משכפלים את מפת המשבצות פעם אחת ומוסיפים עד היעד (עם תקרה).
-    var tiles = {};
-    for (var t in state.tiles) tiles[t] = state.tiles[t];
-    var working = Object.assign({}, state, { tiles: tiles });
+    var growthMs = state.session.growthMs + addedMs;
+    var tiles = null;
     var added = 0, cap = Config.growth.maxPerTick;
-    while (owned + added < target && added < cap) {
+    var working = state;
+
+    while (added < cap) {
+      var cost = L.costFor(owned);
+      if (growthMs < cost) break;
+      if (!tiles) { tiles = {}; for (var t in state.tiles) tiles[t] = state.tiles[t]; working = Object.assign({}, state, { tiles: tiles }); }
       var nt = L.nextGrowthTile(working);
-      if (!nt) break; // אין לאן לגדול (מוקפים)
+      if (!nt) { growthMs = cost; break; } // מוקפים — לא צוברים מעבר לעלות אחת
       tiles[L.key(nt.x, nt.y)] = {
         x: nt.x, y: nt.y, ownerId: state.currentUserId,
         color: state.users[state.currentUserId].color, imageUrl: null,
       };
-      added++;
+      growthMs -= cost; owned++; added++;
     }
-    if (added === 0) return state;
-    return Object.assign({}, state, { tiles: tiles });
+
+    var session = { activeMs: state.session.activeMs + addedMs, growthMs: growthMs };
+    return Object.assign({}, state, tiles ? { tiles: tiles, session: session } : { session: session });
   }
 
   /* ---- ה-reducer הטהור --------------------------------------------- */
   T.reducer = function (state, action) {
     switch (action.type) {
-      // זמן פעיל -> צבירה + גידול אוטומטי.
-      case 'TICK': {
-        var next = Object.assign({}, state, {
-          session: { activeMs: state.session.activeMs + action.ms },
-        });
-        return applyGrowth(next);
-      }
+      // זמן פעיל -> צבירה + גידול אוטומטי מואט.
+      case 'TICK':
+        return applyGrowth(state, action.ms);
 
       case 'SET_THEME':
         return Object.assign({}, state, {
