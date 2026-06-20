@@ -21,6 +21,13 @@ window.Territory = window.Territory || {};
   }
   function territorySize(state) { return ownedCount(state); }
 
+  // כל מפתחות המשבצות שבבעלות השחקן (לעריכת כל הטריטוריה יחד).
+  function myTileKeys(state) {
+    var keys = [];
+    for (var k in state.tiles) if (state.tiles[k].ownerId === state.currentUserId) keys.push(k);
+    return keys;
+  }
+
   function activeTimeLabel(state) {
     var sec = Math.floor(state.session.activeMs / 1000);
     var m = Math.floor(sec / 60), s = sec % 60;
@@ -143,6 +150,7 @@ window.Territory = window.Territory || {};
 
   T.Selectors = {
     territorySize: territorySize,
+    myTileKeys: myTileKeys,
     activeTimeLabel: activeTimeLabel,
     nextTileLabel: nextTileLabel,
     portfolioValue: portfolioValue,

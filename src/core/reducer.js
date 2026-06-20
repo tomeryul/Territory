@@ -40,8 +40,9 @@ window.Territory = window.Territory || {};
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
         theme: 'dark',
-        screen: 'map',                       // מסך פעיל (ניווט תחתון)
+        screen: 'home',                      // ברירת מחדל: מסך הבית (כמו ההנדאוף)
         editTab: 'color',                    // טאב בגיליון העריכה
+        sheet: null,                         // גיליון תחתון פתוח (null / 'edit')
         selection: null,
         multiSelect: { on: false, keys: [] },
       },
@@ -155,6 +156,10 @@ window.Territory = window.Territory || {};
       case 'SET_EDIT_TAB':
         return Object.assign({}, state, {
           ui: Object.assign({}, state.ui, { editTab: action.tab }),
+        });
+      case 'SET_SHEET':
+        return Object.assign({}, state, {
+          ui: Object.assign({}, state.ui, { sheet: action.sheet }),
         });
 
       // רכישת טריטוריה בשוק — עולה יהלומים; מסומנת כנמכרה.

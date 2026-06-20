@@ -12,30 +12,37 @@ window.Territory = window.Territory || {};
 (function (T) {
   'use strict';
 
-  // h(tag, props, ...children) -> HTMLElement
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  // תגיות SVG — נוצרות ב-namespace הנכון (להטמעת אייקונים מההנדאוף).
+  var SVG_TAGS = {
+    svg: 1, path: 1, circle: 1, rect: 1, g: 1, line: 1, polyline: 1, polygon: 1,
+    ellipse: 1, defs: 1, linearGradient: 1, radialGradient: 1, stop: 1, clipPath: 1, use: 1,
+  };
+
+  // h(tag, props, ...children) -> Element
   T.h = function (tag, props) {
-    var el = document.createElement(tag);
+    var isSvg = SVG_TAGS[tag] === 1;
+    var el = isSvg ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
     props = props || {};
 
     for (var k in props) {
       var v = props[k];
       if (v == null || v === false) continue;
       if (k === 'class') {
-        el.className = v;
+        if (isSvg) el.setAttribute('class', v); else el.className = v;
       } else if (k === 'style' && typeof v === 'object') {
         for (var s in v) el.style[s] = v[s];
       } else if (k === 'dataset' && typeof v === 'object') {
         for (var d in v) el.dataset[d] = v[d];
       } else if (k.indexOf('on') === 0 && typeof v === 'function') {
         el.addEventListener(k.slice(2).toLowerCase(), v); // onClick -> 'click'
-      } else if (k === 'value') {
+      } else if (k === 'value' && !isSvg) {
         el.value = v;
       } else {
         el.setAttribute(k, v === true ? '' : v);
       }
     }
 
-    // children: שטוח, מדלג על null/false, ממיר טקסט.
     var kids = Array.prototype.slice.call(arguments, 2);
     flatten(kids).forEach(function (c) {
       if (c == null || c === false) return;

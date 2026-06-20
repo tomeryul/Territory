@@ -1,0 +1,210 @@
+/* =====================================================================
+ * worldCanvas.js — מנוע ציור המפה (פורט נאמן מ-Territory.dc.html)
+ * ---------------------------------------------------------------------
+ * [UI ספציפי לפלטפורמה / PLATFORM-SPECIFIC]
+ * פורט כמעט מילולי של לוגיקת ה-canvas מההנדאוף: genBlob/prep/computeFit/
+ * draw/particles/marker/handleClick. מצייר במצב 'home' (טריטוריית השחקן)
+ * או 'world' (כל השחקנים) — בדיוק כמו בעיצוב המקורי.
+ * ===================================================================== */
+
+window.Territory = window.Territory || {};
+
+(function (T) {
+  'use strict';
+
+  function mulberry32(a) {
+    return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+  function genBlob(seed, count) {
+    var r = mulberry32(seed), set = { '0,0': 1 }, list = [[0, 0]];
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]], guard = 0;
+    while (list.length < count && guard < count * 60) {
+      guard++;
+      var b = list[Math.floor(r() * list.length)], d = dirs[Math.floor(r() * dirs.length)];
+      var nx = b[0] + d[0], ny = b[1] + d[1], k = nx + ',' + ny;
+      if (!set[k]) { set[k] = 1; list.push([nx, ny]); }
+    }
+    return list;
+  }
+  function prep(t) {
+    var r = mulberry32(t.seed + 131); t.nodes = [];
+    var n = Math.max(1, Math.round(t.cells.length / 42));
+    for (var i = 0; i < n; i++) t.nodes.push(t.cells[Math.floor(r() * t.cells.length)]);
+    var sx = 0, sy = 0; for (var c = 0; c < t.cells.length; c++) { sx += t.cells[c][0]; sy += t.cells[c][1]; }
+    t.cx = sx / t.cells.length; t.cy = sy / t.cells.length;
+    t.jit = {}; for (var c2 = 0; c2 < t.cells.length; c2++) { var cc = t.cells[c2]; t.jit[cc[0] + ',' + cc[1]] = ((cc[0] * 7 + cc[1] * 13) % 5) / 5; }
+    return t;
+  }
+
+  // הגדרות שחקני העולם — כפי שבהנדאוף.
+  var WORLD_DEFS = [
+    { name: 'TraderOne', seed: 7, off: [0, 4], color: '#4060e6', glow: 'rgba(90,130,255,.9)', node: '#9cc0ff', isPlayer: true, count: 150, share: '18.4%', value: '4.2M', tiles: '245', rank: '#3' },
+    { name: 'LandLord', seed: 21, off: [-19, -11], color: '#7c3aed', glow: 'rgba(150,80,255,.85)', node: '#c4a3ff', count: 72, share: '9.1%', value: '750K', tiles: '150', rank: '#9' },
+    { name: 'PixelMaster', seed: 33, off: [15, -13], color: '#16b8a6', glow: 'rgba(40,225,205,.85)', node: '#7af0e0', count: 96, share: '32.2%', value: '2.4M', tiles: '322', rank: '#1' },
+    { name: 'CryptoKing', seed: 48, off: [26, 3], color: '#a855f7', glow: 'rgba(180,110,255,.85)', node: '#dcb8ff', count: 60, share: '6.0%', value: '410K', tiles: '80', rank: '#14' },
+    { name: 'GoldRush', seed: 60, off: [-21, 15], color: '#cf9b2c', glow: 'rgba(245,196,81,.85)', node: '#ffdd92', count: 58, share: '4.4%', value: '1.2M', tiles: '200', rank: '#6' },
+    { name: 'RoseEmpire', seed: 72, off: [3, 19], color: '#e0567a', glow: 'rgba(255,110,150,.8)', node: '#ffaec3', count: 70, share: '7.8%', value: '980K', tiles: '118', rank: '#7' },
+    { name: 'NightOwl', seed: 84, off: [22, 17], color: '#4f5bd5', glow: 'rgba(110,125,255,.8)', node: '#aeb6ff', count: 60, share: '5.2%', value: '620K', tiles: '95', rank: '#11' },
+  ];
+
+  T.createWorldCanvas = function (canvas, opts) {
+    opts = opts || {};
+    var ctx = canvas.getContext('2d');
+    var screen = 'home', selected = 2, glow = 1;
+    var homeTerr, worldTerr, worldMap = {}, particles = null, fit = null, fitKey = '', lastHomeCount = -1;
+    var raf = null, running = false;
+
+    function buildWorld() {
+      worldTerr = WORLD_DEFS.map(function (d) { var dd = {}; for (var p in d) dd[p] = d[p]; dd.cells = genBlob(dd.seed, dd.count); return prep(dd); });
+      worldMap = {};
+      worldTerr.forEach(function (t, i) { for (var c = 0; c < t.cells.length; c++) { var cc = t.cells[c]; worldMap[(cc[0] + t.off[0]) + ',' + (cc[1] + t.off[1])] = i; } });
+    }
+    function buildHome(count) {
+      count = Math.max(6, count || 6); lastHomeCount = count;
+      homeTerr = prep({ name: 'You', seed: 7, off: [0, 0], color: '#4060e6', glow: 'rgba(90,130,255,.95)', node: '#8ab0ff', isPlayer: true, cells: genBlob(7, count) });
+    }
+    buildWorld(); buildHome(6);
+
+    function activeList() { return screen === 'world' ? worldTerr : [homeTerr]; }
+
+    function computeFit(W, H) {
+      var list = activeList(); if (!list || !list[0]) return null;
+      var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+      for (var i = 0; i < list.length; i++) for (var c = 0; c < list[i].cells.length; c++) {
+        var gx = list[i].cells[c][0] + list[i].off[0], gy = list[i].cells[c][1] + list[i].off[1];
+        if (gx < minX) minX = gx; if (gy < minY) minY = gy; if (gx > maxX) maxX = gx; if (gy > maxY) maxY = gy;
+      }
+      var spanX = maxX - minX + 1, spanY = maxY - minY + 1;
+      var pad = screen === 'world' ? 0.9 : 0.82;
+      var step = Math.min(W * pad / spanX, H * pad / spanY);
+      var gap = Math.max(1, step * 0.14), cell = step - gap;
+      var originX = (W - spanX * step) / 2 - minX * step + gap / 2;
+      var originY = (H - spanY * step) / 2 - minY * step + gap / 2;
+      return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, step: step, gap: gap, cell: cell, originX: originX, originY: originY };
+    }
+    function initParticles(W, H) {
+      var n = Math.round(48 * glow), pal = ['rgba(167,139,250,', 'rgba(90,240,255,', 'rgba(245,196,81,'];
+      particles = [];
+      for (var i = 0; i < n; i++) particles.push({ x: Math.random() * W, y: Math.random() * H, vy: 0.12 + Math.random() * 0.45, vx: (Math.random() - 0.5) * 0.18, r: 0.6 + Math.random() * 1.9, a: 0.15 + Math.random() * 0.55, tw: Math.random() * 6.28, c: pal[Math.random() < 0.15 ? 2 : (Math.random() < 0.5 ? 1 : 0)] });
+    }
+    function sp(gx, gy, f) { return [f.originX + gx * f.step, f.originY + gy * f.step]; }
+
+    function draw(ts) {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      var cssW = canvas.clientWidth, cssH = canvas.clientHeight; if (!cssW || !cssH) return;
+      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) { canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr); fit = null; }
+      var key = screen + '|' + cssW + 'x' + cssH;
+      if (key !== fitKey) { fit = null; fitKey = key; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var W = cssW, H = cssH;
+      if (!fit) { fit = computeFit(W, H); initParticles(W, H); }
+      var f = fit; if (!f) return;
+      var t = ts / 1000, list = activeList();
+
+      ctx.clearRect(0, 0, W, H);
+      // grid dots
+      ctx.fillStyle = 'rgba(150,140,210,0.05)';
+      var gs = f.step, ox = ((f.originX % gs) + gs) % gs, oy = ((f.originY % gs) + gs) % gs;
+      for (var gx = ox; gx < W; gx += gs) for (var gy = oy; gy < H; gy += gs) ctx.fillRect(gx - 0.5, gy - 0.5, 1, 1);
+
+      // glow pass
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      list.forEach(function (tt) {
+        var isSel = screen === 'world' && worldTerr[selected] === tt;
+        var c = sp(tt.cx + tt.off[0], tt.cy + tt.off[1], f);
+        var ext = Math.sqrt(tt.cells.length) * f.step * 0.62;
+        var pulse = 0.78 + 0.22 * Math.sin(t * 1.6 + tt.seed);
+        var g = ctx.createRadialGradient(c[0], c[1], 0, c[0], c[1], ext);
+        var a = (isSel ? 0.5 : 0.3) * pulse * glow;
+        g.addColorStop(0, tt.glow.replace(/[\d.]+\)$/, a + ')'));
+        g.addColorStop(1, tt.glow.replace(/[\d.]+\)$/, '0)'));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c[0], c[1], ext, 0, 6.2832); ctx.fill();
+      });
+      ctx.restore();
+
+      // cells
+      list.forEach(function (tt) {
+        var isSel = screen === 'world' && worldTerr[selected] === tt;
+        var cw = f.cell, r = Math.max(1.2, cw * 0.18), nodeSet = {};
+        for (var ni = 0; ni < tt.nodes.length; ni++) nodeSet[tt.nodes[ni][0] + ',' + tt.nodes[ni][1]] = 1;
+        for (var ci = 0; ci < tt.cells.length; ci++) {
+          var c = tt.cells[ci], pos = sp(c[0] + tt.off[0], c[1] + tt.off[1], f), X = pos[0], Y = pos[1];
+          var isNode = nodeSet[c[0] + ',' + c[1]];
+          rr(X, Y, cw, cw, r); ctx.fillStyle = tt.color; ctx.fill();
+          var j = tt.jit[c[0] + ',' + c[1]] || 0;
+          ctx.fillStyle = 'rgba(0,0,0,' + (0.05 + j * 0.14) + ')'; ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(X + r * 0.3, Y + r * 0.3, cw - r * 0.6, cw * 0.34);
+          ctx.fillStyle = 'rgba(0,0,0,0.26)'; ctx.fillRect(X, Y + cw * 0.64, cw, cw * 0.36);
+          if (isSel) { ctx.fillStyle = 'rgba(255,255,255,0.10)'; rr(X, Y, cw, cw, r); ctx.fill(); }
+          if (isNode) {
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = tt.node; ctx.beginPath(); ctx.arc(X + cw / 2, Y + cw / 2, cw * 0.34, 0, 6.2832); ctx.fill(); ctx.restore();
+            ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(X + cw / 2, Y + cw / 2, Math.max(0.8, cw * 0.1), 0, 6.2832); ctx.fill();
+          }
+        }
+      });
+
+      // selection outline (world)
+      if (screen === 'world') {
+        var st = worldTerr[selected], node = st.nodes[0], pos2 = sp(node[0] + st.off[0], node[1] + st.off[1], f);
+        var cw2 = f.cell, pad = f.step * 0.55, blink = 0.6 + 0.4 * Math.sin(t * 3);
+        ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,' + blink + ')'; ctx.lineWidth = 2;
+        ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 10;
+        rr(pos2[0] - pad, pos2[1] - pad, cw2 + pad * 2, cw2 + pad * 2, 5); ctx.stroke(); ctx.restore();
+      }
+
+      // particles
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      if (particles) for (var pi = 0; pi < particles.length; pi++) {
+        var p = particles[pi]; p.y -= p.vy; p.x += p.vx;
+        if (p.y < -4) { p.y = H + 4; p.x = Math.random() * W; }
+        if (p.x < -4) p.x = W + 4; if (p.x > W + 4) p.x = -4;
+        var tw = 0.5 + 0.5 * Math.sin(t * 2 + p.tw), al = p.a * tw * (0.5 + 0.5 * glow);
+        var g2 = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3.5);
+        g2.addColorStop(0, p.c + al + ')'); g2.addColorStop(1, p.c + '0)');
+        ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3.5, 0, 6.2832); ctx.fill();
+      }
+      ctx.restore();
+
+      placeMarker(f, list);
+    }
+
+    function rr(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath(); ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    function placeMarker(f, list) {
+      var el = typeof opts.marker === 'function' ? opts.marker() : opts.marker; if (!el) return;
+      var player = null; for (var i = 0; i < list.length; i++) if (list[i].isPlayer) { player = list[i]; break; }
+      if (!player) player = list[0];
+      var pos = sp(player.cx + player.off[0], player.cy + player.off[1], f);
+      el.style.left = pos[0] + 'px'; el.style.top = pos[1] + 'px'; el.style.display = 'block';
+    }
+
+    function handleClick(clientX, clientY) {
+      if (screen !== 'world' || !fit) return;
+      var rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top, f = fit;
+      var gx = Math.round((x - f.originX - f.cell / 2) / f.step), gy = Math.round((y - f.originY - f.cell / 2) / f.step);
+      var found = null, best = 99;
+      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+        var k = (gx + dx) + ',' + (gy + dy);
+        if (k in worldMap) { var d = Math.abs(dx) + Math.abs(dy); if (d < best) { best = d; found = worldMap[k]; } }
+      }
+      if (found !== null) { selected = found; if (opts.onSelect) opts.onSelect(getSelected()); }
+    }
+    function getSelected() { return worldTerr[selected]; }
+
+    function loop(ts) { if (!running) return; draw(ts || 0); raf = requestAnimationFrame(loop); }
+    function start() { if (running) return; running = true; raf = requestAnimationFrame(loop); }
+    function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = null; }
+
+    return {
+      setScreen: function (s) { if (s !== screen) { screen = s; fit = null; } },
+      setHomeCount: function (n) { n = Math.max(6, n | 0); if (n !== lastHomeCount) { buildHome(n); fit = null; } },
+      handleClick: handleClick, getSelected: getSelected,
+      start: start, stop: stop,
+    };
+  };
+})(window.Territory);
