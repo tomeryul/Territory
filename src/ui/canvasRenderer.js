@@ -108,7 +108,13 @@ window.Territory = window.Territory || {};
       var stable = lastView && lastView.scale === scene.scale &&
         Math.abs(lastView.sx0 - scene.sx0) < 0.6 && Math.abs(lastView.sy0 - scene.sy0) < 0.6;
       var now = Date.now();
-      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale, pal, phase, now, stable); });
+      // תאורה רציפה: גרדיאנט אחד במרחב-המסך שמשותף לכל המשבצות, כך
+      // שהשכבה נראית אחידה ומחוברת (בלי "קופסאות" פר-משבצת).
+      var sheen = ctx.createLinearGradient(0, 0, scene.view.w, scene.view.h);
+      sheen.addColorStop(0, 'rgba(255,255,255,0.16)');
+      sheen.addColorStop(0.45, 'rgba(255,255,255,0.0)');
+      sheen.addColorStop(1, 'rgba(0,0,0,0.24)');
+      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale, pal, phase, now, stable, sheen); });
       lastView = { sx0: scene.sx0, sy0: scene.sy0, scale: scene.scale };
 
       scene.multi.forEach(function (m) { outline(m, pal.accent, Math.max(2, scale * 0.12)); });
@@ -161,16 +167,16 @@ window.Territory = window.Territory || {};
       ctx.globalAlpha = 1;
     }
 
-    // משבצת בבעלות = "קרקע סייבר": גרדיאנט + עומק תלת-ממד + טקסטורת פיקסל +
-    // ניצוצות, עם מסגרת חיצונית זהובה מונפשת (marching-ants) וקצוות פנימיים
-    // עדינים — כך הטריטוריה נראית כממלכה חיה אחת, לא כריבועים.
-    function drawOwnedTile(t, size, pal, phase, now, stable) {
+    // משבצת בבעלות = קרקע אחת מחוברת: מילוי + תאורה רציפה (sheen משותף),
+    // טקסטורה עדינה, ובליטה/מסגרת רק בקצה החיצוני של הטריטוריה — כך
+    // משבצות צמודות מתמזגות לגוש אחד, בלי קווי-הפרדה ובלי קופסאות.
+    function drawOwnedTile(t, size, pal, phase, now, stable, sheen) {
       var k = t.x + ',' + t.y;
-      if (seen[k] === undefined) seen[k] = stable ? now : 0; // 0 = "כבר קיימת" (בלי אנימציה)
+      if (seen[k] === undefined) seen[k] = stable ? now : 0; // 0 = "כבר קיימת"
       var ease = 1;
       if (seen[k]) {
         var p = (now - seen[k]) / EXPAND_MS;
-        if (p >= 1) seen[k] = 0; else ease = 1 - Math.pow(1 - Math.max(0, p), 3); // easeOutCubic
+        if (p >= 1) seen[k] = 0; else ease = 1 - Math.pow(1 - Math.max(0, p), 3);
       }
 
       var inset = (1 - ease) * size * 0.5;
@@ -179,9 +185,10 @@ window.Territory = window.Territory || {};
       ctx.globalAlpha = baseAlpha * (0.25 + 0.75 * ease);
 
       var m = t.mask || 0;
-      var interior = (m & 1) && (m & 4) && (m & 16) && (m & 64);
+      var openN = !(m & 1), openE = !(m & 4), openS = !(m & 16), openW = !(m & 64);
+      var edge = size * 0.16; // עובי הבליטה/הצללה בקצה החיצוני
 
-      /* ---- מילוי: תמונה או גרדיאנט עם עומק ---- */
+      /* ---- מילוי בסיס (שטוח כדי שלא ייווצרו תפרים בין משבצות) ---- */
       if (t.imageUrl) {
         var rec = getImg(t.imageUrl);
         if (rec.ready) {
@@ -189,80 +196,66 @@ window.Territory = window.Territory || {};
           ctx.drawImage(rec.img, x, y, s, s); ctx.restore();
         } else { ctx.fillStyle = t.color || '#6C5CE7'; ctx.fillRect(x, y, s + 1, s + 1); }
       } else {
-        var base = parseRGB(t.color || '#6C5CE7');
-        var g = ctx.createLinearGradient(x, y, x + s, y + s);
-        g.addColorStop(0, rgbStr(mix(base, WHITE, 0.30)));
-        g.addColorStop(0.5, rgbStr(base));
-        g.addColorStop(1, rgbStr(mix(base, BLACK, 0.32)));
-        if (size >= 14) { ctx.shadowColor = pal.glow; ctx.shadowBlur = size * 0.4; }
-        ctx.fillStyle = g; ctx.fillRect(x, y, s + 1, s + 1);
-        ctx.shadowBlur = 0;
+        ctx.fillStyle = t.color || '#6C5CE7';
+        ctx.fillRect(x, y, s + 1, s + 1);
+        // תאורה רציפה (אותו גרדיאנט-מסך לכל המשבצות => נראה מחובר).
+        ctx.fillStyle = sheen; ctx.fillRect(x, y, s + 1, s + 1);
 
-        if (size >= 12) {
-          // עומק תלת-ממד: הדגשה עליונה-שמאלית, צל תחתון-ימני.
-          var d = Math.max(1, s * 0.1);
-          ctx.fillStyle = 'rgba(255,255,255,0.22)';
-          ctx.fillRect(x, y, s, d); ctx.fillRect(x, y, d, s);
-          ctx.fillStyle = 'rgba(0,0,0,0.28)';
-          ctx.fillRect(x, y + s - d, s, d); ctx.fillRect(x + s - d, y, d, s);
-        }
-        if (size >= 20) {
-          // טקסטורת פיקסל עדינה (דית'רינג דטרמיניסטי).
+        // טקסטורה דקה (רעש דטרמיניסטי) — מוסיף חיים בלי תפרים.
+        if (size >= 18) {
           var sd = seedOf(t.x, t.y), cells = 4, cw = s / cells;
           for (var ix = 0; ix < cells; ix++) for (var iy = 0; iy < cells; iy++) {
             var r2 = rnd(sd + ix * 31 + iy * 17);
-            if (r2 > 0.78) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + ix * cw, y + iy * cw, cw * 0.5, cw * 0.5); }
-            else if (r2 < 0.12) { ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(x + ix * cw, y + iy * cw, cw * 0.5, cw * 0.5); }
+            if (r2 > 0.82) { ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + ix * cw, y + iy * cw, cw * 0.5, cw * 0.5); }
+            else if (r2 < 0.1) { ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(x + ix * cw, y + iy * cw, cw * 0.5, cw * 0.5); }
           }
         }
       }
 
-      /* ---- קצוות פנימיים: קו עדין מאוד (מיזוג) ---- */
-      if (size >= 14 && interior) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
-        ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      /* ---- עומק רק בקצה החיצוני (בליטת-רמה לכל הטריטוריה) ---- */
+      if (size >= 12) {
+        if (openN) { ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(x, y, s, edge); }
+        if (openW) { ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(x, y, edge, s); }
+        if (openS) { ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(x, y + s - edge, s, edge); }
+        if (openE) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + s - edge, y, edge, s); }
       }
 
-      /* ---- מסגרת חיצונית זהובה מונפשת (גבול הממלכה) ---- */
-      if (size >= 9 && !interior && ease > 0.6) {
-        var pulse = 0.6 + 0.4 * Math.sin(phase * 2.2 + (t.x + t.y) * 0.3);
-        var lw = Math.max(1.5, size * 0.11);
+      /* ---- מסגרת זהב רכה ורציפה (בלי קו-נמלים) + זוהר פועם עדין ---- */
+      if (size >= 9 && (openN || openE || openS || openW) && ease > 0.6) {
+        var glow = 0.7 + 0.3 * Math.sin(phase * 1.3 + (t.x + t.y) * 0.12);
         ctx.strokeStyle = GOLD;
-        ctx.shadowColor = 'rgba(255,200,87,0.7)'; ctx.shadowBlur = size * 0.7 * pulse;
-        ctx.lineWidth = lw;
-        var dash = Math.max(4, size * 0.28);
-        ctx.setLineDash([dash, dash * 0.6]);
-        ctx.lineDashOffset = -(phase * size * 0.9) % (dash * 1.6);
+        ctx.lineWidth = Math.max(1.4, size * 0.085);
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(255,200,90,0.65)'; ctx.shadowBlur = size * 0.55 * glow;
         var x0 = x, y0 = y, x1 = x + s, y1 = y + s;
         ctx.beginPath();
-        if (!(m & 1)) { ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); }
-        if (!(m & 4)) { ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); }
-        if (!(m & 16)) { ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); }
-        if (!(m & 64)) { ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); }
+        if (openN) { ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); }
+        if (openE) { ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); }
+        if (openS) { ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); }
+        if (openW) { ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); }
         ctx.stroke();
-        ctx.setLineDash([]); ctx.shadowBlur = 0;
+        ctx.shadowBlur = 0;
       }
 
-      /* ---- ניצוצות דיגיטליים מדי פעם ---- */
+      /* ---- ניצוצות עדינים מדי פעם ---- */
       if (size >= 16) {
         var ssd = seedOf(t.x * 3, t.y * 5), chance = rnd(ssd);
-        if (chance > 0.82) {
-          var tw = Math.sin(phase * 3 + chance * 30);
-          if (tw > 0.2) {
-            var px = x + (0.2 + rnd(ssd + 1) * 0.6) * s, py = y + (0.2 + rnd(ssd + 2) * 0.6) * s;
-            var r = Math.max(1, s * 0.06) * tw;
-            ctx.fillStyle = 'rgba(255,255,255,' + (0.85 * tw) + ')';
-            ctx.shadowColor = pal.secondary || '#00D4FF'; ctx.shadowBlur = 8 * tw;
-            ctx.fillRect(px - r, py - r * 0.25, r * 2, r * 0.5);
-            ctx.fillRect(px - r * 0.25, py - r, r * 0.5, r * 2);
+        if (chance > 0.85) {
+          var tw = Math.sin(phase * 2.4 + chance * 30);
+          if (tw > 0.4) {
+            var px = x + (0.25 + rnd(ssd + 1) * 0.5) * s, py = y + (0.25 + rnd(ssd + 2) * 0.5) * s;
+            var r = Math.max(1, s * 0.05) * tw;
+            ctx.fillStyle = 'rgba(255,255,255,' + (0.8 * tw) + ')';
+            ctx.shadowColor = pal.secondary || '#00D4FF'; ctx.shadowBlur = 7 * tw;
+            ctx.fillRect(px - r, py - r * 0.22, r * 2, r * 0.44);
+            ctx.fillRect(px - r * 0.22, py - r, r * 0.44, r * 2);
             ctx.shadowBlur = 0;
           }
         }
       }
 
-      // הבזק בעת התרחבות.
-      if (ease < 1) {
-        ctx.globalAlpha = baseAlpha * (1 - ease) * 0.8;
+      if (ease < 1) { // הבזק רך בעת התרחבות
+        ctx.globalAlpha = baseAlpha * (1 - ease) * 0.6;
         ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, s + 1, s + 1);
       }
       ctx.globalAlpha = 1;
