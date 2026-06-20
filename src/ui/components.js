@@ -77,12 +77,16 @@ window.Territory = window.Territory || {};
     }
 
     return h('div', { class: 'screen-home' },
+      // ---- countdown banner (הטייל הבא — בולט מאוד למעלה) ----
+      Countdown(ctx),
       // ---- currency bar ----
       h('div', { class: 'currency-bar' },
         pill('gem', '#5af0ff', String(P.gems(st)), '#cfeaff', 'rgba(90,150,255,.22)', 'linear-gradient(160deg,rgba(40,52,92,.6),rgba(14,16,34,.6))'),
         pill('coin', '#f5c451', P.coinsLabel(st), '#ffe6ab', 'rgba(245,196,81,.28)', 'linear-gradient(160deg,rgba(70,58,30,.55),rgba(20,16,30,.6))'),
         pill('crown', '#c4b5fd', '#' + P.rank(st), '#e6ddff', 'rgba(167,139,250,.28)', 'linear-gradient(160deg,rgba(58,42,92,.6),rgba(16,15,32,.6))')
       ),
+      // ---- resources bar (משאבים שנאספו מהאזורים) ----
+      ResourcesBar(ctx),
       // ---- profile card ----
       h('div', { class: 'profile-card glass' },
         h('div', { class: 'pc-orb' }),
@@ -299,35 +303,62 @@ window.Territory = window.Territory || {};
   }
 
   /* ---- גיליון עריכת טריטוריה (כל המשבצות יחד) ---- */
+  /* ---- ספירה-לאחור לטייל הבא (בולט בראש המסך) ---- */
+  function Countdown(ctx) {
+    var st = ctx.state, S = ctx.S;
+    return h('div', { class: 'countdown glass' },
+      h('div', { class: 'countdown__top' },
+        h('span', { class: 'countdown__label' }, '⏳ הטייל הבא בעוד'),
+        h('span', { class: 'countdown__time' }, S.nextTileLabel(st))),
+      h('div', { class: 'countdown__bar' }, h('div', { class: 'countdown__fill', style: { width: Math.round(S.growthProgress(st) * 100) + '%' } })));
+  }
+
+  /* ---- סרגל משאבים שנאספו מהאזורים ---- */
+  function ResourcesBar(ctx) {
+    var st = ctx.state, S = ctx.S;
+    return h('div', { class: 'res-bar' }, Object.keys(T.Resources).map(function (id) {
+      var r = T.Resources[id];
+      return h('div', { class: 'res-pill' }, h('span', { class: 'res-pill__i' }, r.emoji),
+        h('span', { class: 'res-pill__n', style: { color: r.color } }, String(S.resourceCount(st, id))));
+    }));
+  }
+
+  /* ---- גיליון עיצוב הטריטוריה: צבע (חינם) + אפקטים (עולים משאבים) ---- */
   function EditSheet(ctx) {
-    var st = ctx.state, S = ctx.S, d = ctx.dispatch;
+    var st = ctx.state, d = ctx.dispatch;
     if (st.ui.sheet !== 'edit') return null;
-    var keys = S.myTileKeys(st), tab = st.ui.editTab;
+    var tab = st.ui.editTab;
     function Tab(id, label) { return h('button', { class: 'tab' + (tab === id ? ' tab--active' : ''), onClick: function () { d({ type: 'SET_EDIT_TAB', tab: id }); } }, label); }
-    var content = tab === 'image' ? ImageEditor(keys, ctx, null) : tab === 'effects' ? EffectsEditor(keys, ctx) : ColorEditor(keys, ctx);
+    var content = tab === 'effects' ? EffectsEditor(ctx) : ColorEditor(ctx);
     return h('div', { class: 'sheet glass' },
       h('div', { class: 'sheet__header' },
         h('button', { class: 'sheet__close', onClick: function () { d({ type: 'SET_SHEET', sheet: null }); } }, '✕'),
-        h('h3', { class: 'sheet__title' }, 'עריכת הטריטוריה'), h('span', { class: 'sheet__coord' }, keys.length + ' משבצות')),
-      h('div', { class: 'sheet__body' }, h('div', { class: 'tabs' }, Tab('color', 'צבע'), Tab('image', 'תמונה'), Tab('effects', 'אפקטים')), content));
+        h('h3', { class: 'sheet__title' }, 'עיצוב הטריטוריה'), h('span', { class: 'sheet__coord' }, '🎨')),
+      h('div', { class: 'sheet__body' },
+        h('p', { class: 'hint' }, 'צבעים חינם · אפקטים מיוחדים נקנים במשאבים שנאספו מהאזורים על המפה.'),
+        h('div', { class: 'tabs' }, Tab('color', 'צבע'), Tab('effects', 'אפקטים')), content));
   }
   var COLOR_PRESETS = ['#4060e6', PAL.brand, PAL.cyan, PAL.green, PAL.pink, '#a855f7', PAL.coin, PAL.slate];
-  function ColorEditor(keys, ctx) {
-    var d = ctx.dispatch;
-    var swatches = COLOR_PRESETS.map(function (color) { return h('button', { class: 'swatch', style: { background: color }, onClick: function () { d({ type: 'SET_TILE_COLOR', keys: keys, color: color }); } }); });
-    var picker = h('input', { type: 'color', class: 'color-input', onInput: function (e) { d({ type: 'SET_TILE_COLOR', keys: keys, color: e.target.value }); } });
+  function ColorEditor(ctx) {
+    var d = ctx.dispatch, cur = ctx.state.meta.territoryStyle.color;
+    var swatches = COLOR_PRESETS.map(function (color) {
+      return h('button', { class: 'swatch' + (cur === color ? ' swatch--sel' : ''), style: { background: color }, onClick: function () { d({ type: 'SET_TERRITORY_COLOR', color: color }); } });
+    });
+    var picker = h('input', { type: 'color', class: 'color-input', value: cur, onInput: function (e) { d({ type: 'SET_TERRITORY_COLOR', color: e.target.value }); } });
     return h('div', { class: 'field' }, h('div', { class: 'swatches' }, swatches, picker));
   }
-  function ImageEditor(keys, ctx) {
-    var d = ctx.dispatch;
-    var urlInput = h('input', { type: 'url', class: 'text-input', placeholder: 'כתובת תמונה (URL)', onChange: function (e) { var u = e.target.value.trim(); d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: u || null }); } });
-    var fileInput = h('input', { type: 'file', accept: 'image/*', class: 'file-input', onChange: function (e) { var f = e.target.files && e.target.files[0]; T.readImageFile(f).then(function (u) { if (u) d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: u }); }); e.target.value = ''; } });
-    return h('div', { class: 'field' }, urlInput, h('div', { class: 'field__row' }, h('label', { class: 'btn-sec file-btn' }, 'העלה קובץ', fileInput), h('div', { class: 'btn-sec', onClick: function () { d({ type: 'SET_TILE_IMAGE', keys: keys, imageUrl: null }); } }, 'הסר')));
-  }
-  function EffectsEditor(keys, ctx) {
-    var d = ctx.dispatch;
-    var slider = h('input', { type: 'range', min: '20', max: '100', value: '100', class: 'slider', onInput: function (e) { d({ type: 'SET_TILE_OPACITY', keys: keys, opacity: (+e.target.value) / 100 }); } });
-    return h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'שקיפות'), slider);
+  function EffectsEditor(ctx) {
+    var st = ctx.state, d = ctx.dispatch, cur = st.meta.territoryStyle.effect, res = st.meta.resources || {};
+    return h('div', { class: 'effects' }, T.Effects.map(function (e) {
+      var sel = cur === e.id;
+      var afford = !e.cost || Object.keys(e.cost).every(function (rk) { return (res[rk] || 0) >= e.cost[rk]; });
+      var costTxt = e.cost ? Object.keys(e.cost).map(function (rk) { return T.Resources[rk].emoji + e.cost[rk]; }).join(' ') : 'חינם';
+      return h('button', {
+        class: 'effect' + (sel ? ' effect--sel' : '') + ((sel || afford) ? '' : ' effect--locked'),
+        onClick: (sel || afford) ? function () { d({ type: 'APPLY_TERRITORY_EFFECT', effect: e.id }); } : null,
+      }, h('span', { class: 'effect__emoji' }, e.emoji), h('span', { class: 'effect__name' }, e.name),
+        h('span', { class: 'effect__cost' }, sel ? '✓ פעיל' : costTxt));
+    }));
   }
 
   T.Components = { Screen: Screen, BottomNav: BottomNav };

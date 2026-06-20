@@ -31,10 +31,10 @@ window.Territory = window.Territory || {};
     return Math.floor(x / Config.bucket) + ',' + Math.floor(y / Config.bucket);
   }
 
-  /* ---- גידול אוטומטי מואט --------------------------------------------- */
-  // הזמן (ms) הדרוש למשבצת הבאה גדל ככל שכבר יש יותר משבצות.
+  /* ---- גידול אוטומטי בקצב קבוע --------------------------------------- */
+  // הזמן (ms) הדרוש לכל טייל נוסף — קבוע (30 דקות), ללא תלות בגודל.
   function costFor(owned) {
-    return Config.growth.baseMs * (1 + owned * Config.growth.slowdown);
+    return Config.growth.msPerTile;
   }
 
   // המשבצת הבאה שתתווסף: הפנויה (לא אזור, בעולם) הצמודה לטריטוריה,

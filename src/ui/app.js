@@ -26,6 +26,12 @@ window.Territory = window.Territory || {};
     var worldCtl = T.createWorldCanvas(mapCanvas, {
       marker: function () { return document.querySelector('.player-marker'); },
       onSelect: function () { render(); },
+      getTerritoryStyle: function () { return store.getState().meta.territoryStyle; },
+      zoneReady: function (id) { return T.Selectors.zoneReady(store.getState(), id); },
+      onZoneTap: function (id) {
+        var pl = T.PlaceById[id]; if (!pl) return;
+        d({ type: 'COLLECT_RESOURCE', zoneId: id, resource: pl.resource, amount: pl.amount });
+      },
     });
     // המחוות (צביטה/גלגל/גרירה/נגיעה) מטופלות בתוך worldCanvas על ה-canvas.
 

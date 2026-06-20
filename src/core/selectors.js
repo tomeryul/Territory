@@ -34,12 +34,29 @@ window.Territory = window.Territory || {};
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // שניות עד המשבצת הבאה (לפי מודל העלות המואט).
-  function nextTileLabel(state) {
-    var cost = L.costFor(ownedCount(state));
-    var remain = Math.max(0, cost - state.session.growthMs);
-    return Math.ceil(remain / 1000) + 'ש׳';
+  // זמן עד הטייל הבא — פורמט HH:MM:SS.
+  function nextTileMs(state) {
+    return Math.max(0, L.costFor(ownedCount(state)) - state.session.growthMs);
   }
+  function nextTileLabel(state) {
+    var s = Math.ceil(nextTileMs(state) / 1000);
+    var hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return (hh > 0 ? p(hh) + ':' : '') + p(mm) + ':' + p(ss);
+  }
+  function growthProgress(state) {
+    var cost = L.costFor(ownedCount(state));
+    return cost ? state.session.growthMs / cost : 0;
+  }
+
+  /* ---- משאבים ואיסוף מאזורים ---- */
+  function resourceCount(state, id) { return (state.meta.resources && state.meta.resources[id]) || 0; }
+  function zoneCooldownRemainingMs(state, zoneId) {
+    var last = state.meta.zoneCd && state.meta.zoneCd[zoneId];
+    if (last == null) return 0;
+    return Math.max(0, Config.resources.cooldownMs - (state.session.activeMs - last));
+  }
+  function zoneReady(state, zoneId) { return zoneCooldownRemainingMs(state, zoneId) <= 0; }
 
   /* ---- שווי: משבצת שווה יותר ככל שצמודה לאזורים בעלי-ערך ----------- */
   // מלמד "מיקום": קרבה לעיר/תשתית/מים מעלה ערך — כמו נדל"ן אמיתי.
@@ -151,6 +168,8 @@ window.Territory = window.Territory || {};
   T.Selectors = {
     territorySize: territorySize,
     myTileKeys: myTileKeys,
+    nextTileMs: nextTileMs, growthProgress: growthProgress,
+    resourceCount: resourceCount, zoneCooldownRemainingMs: zoneCooldownRemainingMs, zoneReady: zoneReady,
     activeTimeLabel: activeTimeLabel,
     nextTileLabel: nextTileLabel,
     portfolioValue: portfolioValue,

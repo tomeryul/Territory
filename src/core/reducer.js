@@ -34,8 +34,11 @@ window.Territory = window.Territory || {};
       // מצלמה: מרכז (קואורדינטות עולם) + scale (פיקסלים למשבצת).
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
 
-      // מטבע פרמיום, התקדמות משימות, ובחירת אווטאר (נשמר).
-      meta: { gems: 60, claimedMissions: {}, soldListings: {}, avatarId: 'wizard', customAvatar: null },
+      // מטבע פרמיום, משימות, אווטאר, משאבים ועיצוב טריטוריה (נשמר).
+      meta: {
+        gems: 60, claimedMissions: {}, soldListings: {}, avatarId: 'wizard', customAvatar: null,
+        resources: {}, zoneCd: {}, territoryStyle: { color: '#4060e6', effect: 'none' },
+      },
 
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
@@ -169,6 +172,37 @@ window.Territory = window.Territory || {};
         var sold = Object.assign({}, state.meta.soldListings); sold[action.id] = true;
         return Object.assign({}, state, {
           meta: Object.assign({}, state.meta, { gems: state.meta.gems - action.price, soldListings: sold }),
+        });
+      }
+
+      // איסוף משאב מאזור (עם cooldown לפי זמן פעיל).
+      case 'COLLECT_RESOURCE': {
+        var now = state.session.activeMs;
+        var last = state.meta.zoneCd[action.zoneId];
+        if (last != null && now - last < Config.resources.cooldownMs) return state;
+        var res = Object.assign({}, state.meta.resources);
+        res[action.resource] = (res[action.resource] || 0) + action.amount;
+        var cd = Object.assign({}, state.meta.zoneCd); cd[action.zoneId] = now;
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, { resources: res, zoneCd: cd }) });
+      }
+      // צבע הטריטוריה (חינם).
+      case 'SET_TERRITORY_COLOR':
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { territoryStyle: Object.assign({}, state.meta.territoryStyle, { color: action.color }) }),
+        });
+      // החלת אפקט-עיצוב — עולה משאבים.
+      case 'APPLY_TERRITORY_EFFECT': {
+        var eff = T.EffectById[action.effect]; if (!eff) return state;
+        if (state.meta.territoryStyle.effect === action.effect) return state; // כבר פעיל — לא לחייב שוב
+        var have = state.meta.resources, cost = eff.cost || {};
+        for (var rk in cost) if ((have[rk] || 0) < cost[rk]) return state; // אין מספיק משאבים
+        var nres = Object.assign({}, have);
+        for (var rk2 in cost) nres[rk2] = nres[rk2] - cost[rk2];
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, {
+            resources: nres,
+            territoryStyle: Object.assign({}, state.meta.territoryStyle, { effect: action.effect }),
+          }),
         });
       }
 

@@ -223,3 +223,27 @@ html, body {
 .slider { width: 100%; accent-color: #7c3aed; }
 .file-btn { position: relative; overflow: hidden; }
 .file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* ===== Countdown banner (הטייל הבא) ===== */
+.countdown { border-radius: 16px; padding: 11px 14px; background: linear-gradient(150deg, rgba(124,77,237,.30), rgba(34,211,238,.16)); border: 1px solid rgba(150,120,255,.3); box-shadow: 0 8px 24px rgba(124,77,237,.25), inset 0 1px 0 rgba(255,255,255,.1); }
+.countdown__top { display: flex; align-items: baseline; justify-content: space-between; }
+.countdown__label { font-size: 12px; font-weight: 700; color: #cdbcff; letter-spacing: .02em; }
+.countdown__time { font-family: "Spectral", serif; font-size: 22px; font-weight: 700; color: #fff; letter-spacing: .02em; text-shadow: 0 0 12px rgba(124,77,237,.7); }
+.countdown__bar { height: 7px; margin-top: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.countdown__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7c3aed, #22d3ee); box-shadow: 0 0 10px rgba(34,211,238,.7); transition: width 1s linear; }
+
+/* ===== Resources bar ===== */
+.res-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.res-pill { display: flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid rgba(150,120,255,.18); }
+.res-pill__i { font-size: 13px; }
+.res-pill__n { font-family: "Spectral", serif; font-weight: 700; font-size: 13px; }
+
+/* ===== Effects (design) ===== */
+.effects { display: flex; flex-wrap: wrap; gap: 8px; }
+.effect { flex: 1 1 30%; min-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 6px; border-radius: 14px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(150,120,255,.2); color: #ece9f7; font-family: inherit; }
+.effect--sel { border-color: #22d3ee; box-shadow: 0 0 14px rgba(34,211,238,.45); }
+.effect--locked { opacity: .45; }
+.effect__emoji { font-size: 22px; }
+.effect__name { font-size: 12px; font-weight: 700; }
+.effect__cost { font-size: 11px; color: #9fd7e6; }
+.swatch--sel { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,.6); }

@@ -85,6 +85,17 @@ window.Territory = window.Territory || {};
     }
     buildAll(6);
 
+    // אזורים מיוחדים (ערים/מקומות) על אותו הגריד — מהם אוספים משאבים.
+    var placesList = null, placesMap = {};
+    function buildPlaces() {
+      placesList = (T.Places || []).map(function (pp) {
+        return prep({ name: pp.name, seed: pp.seed, off: pp.off, color: pp.color, glow: pp.glow, node: pp.node, isPlace: true, placeId: pp.id, emoji: pp.emoji, cells: genBlob(pp.seed, pp.count) });
+      });
+      placesMap = {};
+      placesList.forEach(function (t) { for (var c = 0; c < t.cells.length; c++) { var cc = t.cells[c]; placesMap[(cc[0] + t.off[0]) + ',' + (cc[1] + t.off[1])] = t.placeId; } });
+    }
+    buildPlaces();
+
     function activeList() { return allTerr; } // אותה מפה לשני המצבים (בית = זום-אין, עולם = זום-אאוט)
 
     function computeFit(W, H) {
@@ -130,6 +141,13 @@ window.Territory = window.Territory || {};
       var f = fit; if (!f) return;
       var t = ts / 1000, list = activeList();
 
+      // סגנון הטריטוריה של השחקן (צבע/אפקט מהמשאבים).
+      if (allTerr[0] && opts.getTerritoryStyle) {
+        var stl = opts.getTerritoryStyle();
+        if (stl) { allTerr[0].color = stl.color || '#4060e6'; var ef = T.EffectById && T.EffectById[stl.effect]; allTerr[0].glow = ef ? ef.glow : 'rgba(90,130,255,.95)'; }
+      }
+      var drawList = placesList ? list.concat(placesList) : list; // שחקנים + אזורים
+
       ctx.clearRect(0, 0, W, H);
 
       // ---- שכבת העולם (מושפעת מזום/הזזה) ----
@@ -143,7 +161,7 @@ window.Territory = window.Territory || {};
 
       // glow pass
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      list.forEach(function (tt) {
+      drawList.forEach(function (tt) {
         var isSel = screen === 'world' && allTerr[selected] === tt;
         var c = sp(tt.cx + tt.off[0], tt.cy + tt.off[1], f);
         var ext = Math.sqrt(tt.cells.length) * f.step * 0.62;
@@ -157,7 +175,7 @@ window.Territory = window.Territory || {};
       ctx.restore();
 
       // cells
-      list.forEach(function (tt) {
+      drawList.forEach(function (tt) {
         var isSel = screen === 'world' && allTerr[selected] === tt;
         var cw = f.cell, r = Math.max(1.2, cw * 0.18), nodeSet = {};
         for (var ni = 0; ni < tt.nodes.length; ni++) nodeSet[tt.nodes[ni][0] + ',' + tt.nodes[ni][1]] = 1;
@@ -188,6 +206,28 @@ window.Territory = window.Territory || {};
       }
 
       ctx.restore(); // ---- סוף שכבת העולם (זום/הזזה) ----
+
+      // תוויות אזורים + טבעת-איסוף (מרחב-מסך, גודל קבוע).
+      if (placesList) {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (var li = 0; li < placesList.length; li++) {
+          var pl = placesList[li];
+          var bp = sp(pl.cx + pl.off[0], pl.cy + pl.off[1], f), scr = applyCam(bp[0], bp[1]);
+          if (scr[0] < -40 || scr[0] > W + 40 || scr[1] < -40 || scr[1] > H + 40) continue;
+          var ready = opts.zoneReady ? opts.zoneReady(pl.placeId) : true;
+          if (ready) { // טבעת פועמת = ניתן לאסוף
+            var rp = 15 + 3 * Math.sin(t * 3 + li);
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(scr[0], scr[1] - 16, rp, 0, 6.2832); ctx.stroke();
+          }
+          ctx.font = '18px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(pl.emoji, scr[0], scr[1] - 16);
+          ctx.font = '700 10px system-ui';
+          var w = ctx.measureText(pl.name).width + 12;
+          ctx.fillStyle = 'rgba(8,6,18,0.72)'; rr(scr[0] - w / 2, scr[1] + 2, w, 15, 7); ctx.fill();
+          ctx.fillStyle = ready ? '#7df0ff' : '#9aa0b5'; ctx.fillText(pl.name, scr[0], scr[1] + 10);
+        }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
 
       // particles (מרחב-מסך, לא מושפע מזום)
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -221,16 +261,24 @@ window.Territory = window.Territory || {};
     }
 
     function handleClick(clientX, clientY) {
-      if (screen !== 'world' || !fit) return;
+      if (!fit) return;
       var rect = canvas.getBoundingClientRect(), f = fit;
-      // היפוך מצלמה: מסך -> בסיס
       var sxp = clientX - rect.left, syp = clientY - rect.top;
       var x = (sxp - vw / 2 - panX) / zoom + vw / 2, y = (syp - vh / 2 - panY) / zoom + vh / 2;
       var gx = Math.round((x - f.originX - f.cell / 2) / f.step), gy = Math.round((y - f.originY - f.cell / 2) / f.step);
-      var found = null, best = 99;
-      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+      // אזורים קודם (איסוף משאב) — בכל מסך, רדיוס חיפוש רחב יותר.
+      var pf = null, best = 99;
+      for (var dx = -2; dx <= 2; dx++) for (var dy = -2; dy <= 2; dy++) {
         var k = (gx + dx) + ',' + (gy + dy);
-        if (k in worldMap) { var d = Math.abs(dx) + Math.abs(dy); if (d < best) { best = d; found = worldMap[k]; } }
+        if (k in placesMap) { var d = Math.abs(dx) + Math.abs(dy); if (d < best) { best = d; pf = placesMap[k]; } }
+      }
+      if (pf !== null) { if (opts.onZoneTap) opts.onZoneTap(pf); return; }
+      // שחקנים (בחירה) — רק במסך העולם.
+      if (screen !== 'world') return;
+      var found = null; best = 99;
+      for (var dx2 = -1; dx2 <= 1; dx2++) for (var dy2 = -1; dy2 <= 1; dy2++) {
+        var k2 = (gx + dx2) + ',' + (gy + dy2);
+        if (k2 in worldMap) { var d2 = Math.abs(dx2) + Math.abs(dy2); if (d2 < best) { best = d2; found = worldMap[k2]; } }
       }
       if (found !== null) { selected = found; if (opts.onSelect) opts.onSelect(getSelected()); }
     }
