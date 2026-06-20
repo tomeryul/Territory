@@ -72,8 +72,9 @@ window.Territory = window.Territory || {};
     var liveCamera = null, phase = 0, rafId = null;
     function renderState() { var st = store.getState(); return liveCamera ? Object.assign({}, st, { camera: liveCamera }) : st; }
     function palette() {
-      var th = T.Tokens.themes[store.getState().ui.theme];
-      return { bg: th.bg, land: th.empty, gridLine: th.gridLine, accent: th.accent, glow: th.glow, star: th.star };
+      var th = T.Tokens.themes[store.getState().ui.theme] || T.Tokens.themes.dark;
+      return { bg: th.bg, land: th.empty, gridLine: th.gridLine, accent: th.accent,
+        primary: th.primary, secondary: th.secondary, glow: th.glow, star: th.star };
     }
     function render() {
       if (store.getState().ui.screen !== 'map') return;

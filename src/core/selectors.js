@@ -123,7 +123,10 @@ window.Territory = window.Territory || {};
 
     var detail = scale >= Config.camera.detailScale;
     var animatedTypes = { sea: 1, lake: 1, city: 1, factory: 1, rail: 1 };
-    var animated = detail && (rails.length > 0 || zones.some(function (z) { return animatedTypes[z.type]; }));
+    // אנימציה רצה כשיש פירוט וגם משהו שזז: אזורים, טריטוריה (זוהר ניאון)
+    // או בחירה (פעימת זוהר).
+    var animated = detail && (rails.length > 0 || tiles.length > 0 || !!selection ||
+      zones.some(function (z) { return animatedTypes[z.type]; }));
 
     return {
       scale: scale,

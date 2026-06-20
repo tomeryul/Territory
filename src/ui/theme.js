@@ -35,7 +35,7 @@ window.Territory = window.Territory || {};
 
     // מסמן את הנושא הפעיל (שימושי גם ל-color-scheme של הדפדפן).
     root.setAttribute('data-theme', themeName);
-    root.style.colorScheme = themeName === 'dark' ? 'dark' : 'light';
+    root.style.colorScheme = themeName === 'light' ? 'light' : 'dark'; // dark + night => dark
   };
 
   function setGroup(root, prefix, obj) {

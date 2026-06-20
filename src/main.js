@@ -9,7 +9,7 @@
 (function (T) {
   'use strict';
 
-  var STORAGE_KEY = 'territory.save.v5';
+  var STORAGE_KEY = 'territory.save.v6';
 
   // ----- חלקי ה-state שכן נשמרים (האזורים נזרעים מחדש, לא נשמרים) -----
   function persistable(state) {
@@ -31,8 +31,8 @@
       tiles: saved.tiles || initial.tiles,
       session: saved.session || initial.session,
       camera: saved.camera || initial.camera,
-      meta: saved.meta || initial.meta,
-      ui: Object.assign({}, initial.ui, { theme: saved.theme || initial.ui.theme }),
+      meta: Object.assign({}, initial.meta, saved.meta), // ממלא שדות חדשים
+      ui: Object.assign({}, initial.ui, { theme: saved.theme === 'light' ? 'dark' : (saved.theme || initial.ui.theme) }),
     });
   }
 

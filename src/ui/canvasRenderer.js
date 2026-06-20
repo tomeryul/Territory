@@ -84,10 +84,16 @@ window.Territory = window.Territory || {};
         zones.forEach(function (z) { flat(z, (ZT[z.type] || {}).color || '#666'); });
       }
 
-      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale, pal); });
+      scene.tiles.forEach(function (t) { drawOwnedTile(t, scale, pal, phase); });
 
       scene.multi.forEach(function (m) { outline(m, pal.accent, Math.max(2, scale * 0.12)); });
-      if (scene.selection) outline(scene.selection, '#ffffff', Math.max(2, scale * 0.12));
+      if (scene.selection) {
+        // פעימת זוהר על המשבצת הנבחרת.
+        var pulse = 0.5 + 0.5 * Math.sin(phase * 4);
+        ctx.shadowColor = pal.secondary || pal.accent; ctx.shadowBlur = (10 + scale * 0.6) * pulse;
+        outline(scene.selection, '#ffffff', Math.max(2, scale * 0.14));
+        ctx.shadowBlur = 0;
+      }
     }
 
     /* ---- פרימיטיבים ---- */
@@ -112,50 +118,59 @@ window.Territory = window.Territory || {};
       ctx.stroke();
     }
 
-    // כוכבים ברקע (starfield) — backdrop קבוע למסך, מנצנץ בזמן אנימציה.
+    // חלקיקים צפים ברקע — מרחב כהה עם נקודות ניאון שנעות לאט.
     function drawStars(W, H, phase, color) {
       if (!color) return;
-      var step = 46;
-      for (var gx = 0; gx < W; gx += step) {
+      var step = 46, drift = (phase * 8) % step;
+      for (var gx = -step; gx < W + step; gx += step) {
         for (var gy = 0; gy < H; gy += step) {
           var s = rnd((gx * 92837 + 1) ^ (gy * 689287 + 7));
           if (s < 0.55) continue;
-          var px = gx + s * step, py = gy + rnd(gx + gy * 3) * step;
+          var px = gx + s * step + drift, py = gy + rnd(gx + gy * 3) * step;
           var tw = 0.5 + 0.5 * Math.sin(phase * 2 + s * 12);
           ctx.globalAlpha = tw * (s - 0.5) * 1.6;
           ctx.fillStyle = color;
-          ctx.fillRect(px, py, s > 0.92 ? 2 : 1, s > 0.92 ? 2 : 1);
+          ctx.fillRect(px % (W + step), py, s > 0.92 ? 2 : 1, s > 0.92 ? 2 : 1);
         }
       }
       ctx.globalAlpha = 1;
     }
 
-    // משבצת בבעלות — מראה "פיקסל" זוהר עם בליטה (bevel) וזוהר עדין.
-    function drawOwnedTile(t, size, pal) {
+    // משבצת בבעלות — מילוי + מסגרת ניאון רק בקצוות החיצוניים (לפי mask),
+    // כך שטריטוריות מחוברות נראות כממלכה אחת זוהרת ולא כריבועים נפרדים.
+    function drawOwnedTile(t, size, pal, phase) {
       ctx.globalAlpha = t.opacity == null ? 1 : t.opacity;
-      var glow = size >= 16;
-      if (glow) { ctx.shadowColor = pal.glow; ctx.shadowBlur = size * 0.35; }
 
       if (t.imageUrl) {
         var rec = getImg(t.imageUrl);
         if (rec.ready) {
           ctx.save(); ctx.beginPath(); ctx.rect(t.sx, t.sy, size, size); ctx.clip();
           ctx.drawImage(rec.img, t.sx, t.sy, size, size); ctx.restore();
-        } else { ctx.fillStyle = t.color || '#5b8cff'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
-      } else { ctx.fillStyle = t.color || '#5b8cff'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
-      ctx.shadowBlur = 0;
-
-      if (size >= 12 && !t.imageUrl) {
-        // בליטת פיקסל: הדגשה עליונה-שמאלית וצל תחתון-ימני.
-        ctx.fillStyle = 'rgba(255,255,255,0.22)';
-        ctx.fillRect(t.sx, t.sy, size, Math.max(1, size * 0.12));
-        ctx.fillRect(t.sx, t.sy, Math.max(1, size * 0.12), size);
-        ctx.fillStyle = 'rgba(0,0,0,0.22)';
-        ctx.fillRect(t.sx, t.sy + size - Math.max(1, size * 0.12), size, Math.max(1, size * 0.12));
+        } else { ctx.fillStyle = t.color || '#6C5CE7'; ctx.fillRect(t.sx, t.sy, size + 1, size + 1); }
+      } else {
+        ctx.fillStyle = t.color || '#6C5CE7';
+        ctx.fillRect(t.sx, t.sy, size + 1, size + 1);
       }
-      if (size >= 14) {
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
-        ctx.strokeRect(t.sx + 0.5, t.sy + 0.5, size - 1, size - 1);
+
+      // מסגרת ניאון בקצוות פתוחים (גבול הטריטוריה) — עם פעימת זוהר.
+      if (size >= 9) {
+        var m = t.mask || 0;
+        var open = !((m & 1) && (m & 4) && (m & 16) && (m & 64)); // לא פנים-מלא
+        if (open) {
+          var pulse = 0.55 + 0.45 * Math.sin(phase * 2 + (t.x + t.y) * 0.35);
+          var lw = Math.max(1.5, size * 0.1);
+          ctx.strokeStyle = pal.secondary || '#00D4FF';
+          ctx.shadowColor = pal.glow; ctx.shadowBlur = size * 0.6 * pulse;
+          ctx.lineWidth = lw;
+          var x0 = t.sx, y0 = t.sy, x1 = t.sx + size, y1 = t.sy + size;
+          ctx.beginPath();
+          if (!(m & 1)) { ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); }   // N
+          if (!(m & 4)) { ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); }   // E
+          if (!(m & 16)) { ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); }  // S
+          if (!(m & 64)) { ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); }  // W
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
       }
       ctx.globalAlpha = 1;
     }

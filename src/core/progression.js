@@ -78,8 +78,29 @@ window.Territory = window.Territory || {};
     ];
   }
 
+  // שוק טריטוריות — רשימות פרוצדורליות דטרמיניסטיות (פחות מה שכבר נמכר).
+  var OWNERS = ['NeonBaron', 'PixelKhan', 'VoidTrader', 'GridQueen', 'ByteLord', 'StarMogul', 'TerraPrime', 'CryptoNomad'];
+  var TINTS = ['#6C5CE7', '#00D4FF', '#00D97E', '#FFC857', '#FF6BD6', '#9B6CFF'];
+  function prng(a) { return function () { a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function market(state) {
+    var sold = (state.meta && state.meta.soldListings) || {};
+    var r = prng(20260620), out = [];
+    for (var i = 0; i < 8; i++) {
+      var id = 'L' + i;
+      var size = 8 + Math.floor(r() * 240);
+      var price = 10 + Math.floor(size / 6) + Math.floor(r() * 20);
+      var dist = 1 + Math.floor(r() * 90);
+      var shape = []; for (var k = 0; k < 16; k++) shape.push(r() > 0.42 ? 1 : 0);
+      out.push({
+        id: id, owner: OWNERS[i % OWNERS.length], size: size, price: price,
+        distance: dist, shape: shape, tint: TINTS[i % TINTS.length], sold: !!sold[id],
+      });
+    }
+    return out;
+  }
+
   T.Progression = {
-    formatBig: formatBig,
+    formatBig: formatBig, market: market,
     xp: xp, levelInfo: levelInfo,
     coins: coins, coinsLabel: coinsLabel, gems: gems,
     rank: rank, missions: missions, achievements: achievements,

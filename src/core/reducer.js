@@ -35,7 +35,7 @@ window.Territory = window.Territory || {};
       camera: { centerX: Config.start.x, centerY: Config.start.y, scale: Config.camera.defaultScale },
 
       // מטבע פרמיום, התקדמות משימות, ובחירת אווטאר (נשמר).
-      meta: { gems: 0, claimedMissions: {}, avatarId: 'wizard', customAvatar: null },
+      meta: { gems: 60, claimedMissions: {}, soldListings: {}, avatarId: 'wizard', customAvatar: null },
 
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
       ui: {
@@ -156,6 +156,16 @@ window.Territory = window.Territory || {};
         return Object.assign({}, state, {
           ui: Object.assign({}, state.ui, { editTab: action.tab }),
         });
+
+      // רכישת טריטוריה בשוק — עולה יהלומים; מסומנת כנמכרה.
+      case 'BUY_LISTING': {
+        if (state.meta.soldListings[action.id]) return state;
+        if (state.meta.gems < action.price) return state;
+        var sold = Object.assign({}, state.meta.soldListings); sold[action.id] = true;
+        return Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { gems: state.meta.gems - action.price, soldListings: sold }),
+        });
+      }
 
       // בחירת אווטאר מהקטלוג.
       case 'SET_AVATAR':
