@@ -27,7 +27,7 @@ window.Territory = window.Territory || {};
       marker: function () { return document.querySelector('.player-marker'); },
       onSelect: function () { render(); },
     });
-    mapCanvas.addEventListener('click', function (e) { worldCtl.handleClick(e.clientX, e.clientY); });
+    // המחוות (צביטה/גלגל/גרירה/נגיעה) מטופלות בתוך worldCanvas על ה-canvas.
 
     function ctx() {
       return { state: store.getState(), dispatch: d, S: T.Selectors, L: T.Logic, P: T.Progression, world: worldCtl };

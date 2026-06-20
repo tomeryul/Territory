@@ -82,7 +82,9 @@ html, body {
 
 .map-card { position: relative; flex: 1; min-height: 0; border-radius: 24px; overflow: hidden; background: linear-gradient(160deg, rgba(20,18,40,.7), rgba(8,7,18,.8)); border: 1px solid rgba(124,92,246,.3); box-shadow: inset 0 0 40px rgba(80,40,160,.18), inset 0 1px 0 rgba(255,255,255,.06), 0 16px 40px rgba(0,0,0,.55), 0 0 30px rgba(124,77,237,.18); }
 .map-host { position: absolute; inset: 0; }
-.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.map-canvas:active { cursor: grabbing; }
+.fab-z { font-size: 24px; font-weight: 700; color: #b9a8f0; line-height: 1; }
 
 .player-marker { position: absolute; transform: translate(-50%,-50%); pointer-events: none; z-index: 4; }
 .player-marker__ring { position: absolute; inset: -12px; border-radius: 50%; background: radial-gradient(circle, rgba(124,77,237,.7), transparent 70%); animation: flGlow 2.4s ease-in-out infinite; }

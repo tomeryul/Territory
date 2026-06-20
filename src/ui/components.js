@@ -114,9 +114,10 @@ window.Territory = window.Territory || {};
       h('div', { class: 'map-card' },
         h('div', { class: 'map-host' }, Marker(st)),
         h('div', { class: 'map-fab' },
-          h('div', { class: 'fab', title: 'חיפוש' }, Icon('search', '#b9a8f0', 19)),
+          h('div', { class: 'fab', title: 'התקרב', onClick: function () { if (ctx.world) ctx.world.zoomBy(1); } }, h('span', { class: 'fab-z' }, '+')),
+          h('div', { class: 'fab', title: 'התרחק', onClick: function () { if (ctx.world) ctx.world.zoomBy(-1); } }, h('span', { class: 'fab-z' }, '−')),
           h('div', { class: 'fab fab--primary', title: 'מפת עולם', onClick: function () { d({ type: 'SET_SCREEN', screen: 'world' }); } }, Icon('globe', '#fff', 20)),
-          h('div', { class: 'fab', title: 'מרכז', onClick: function () { d({ type: 'SET_SCREEN', screen: 'home' }); } }, Icon('center', '#b9a8f0', 19))
+          h('div', { class: 'fab', title: 'מרכז', onClick: function () { if (ctx.world) ctx.world.resetCamera(); } }, Icon('center', '#b9a8f0', 19))
         )
       ),
       // ---- actions ----

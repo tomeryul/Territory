@@ -32,7 +32,8 @@ window.Territory = window.Territory || {};
     for (var i = 0; i < n; i++) t.nodes.push(t.cells[Math.floor(r() * t.cells.length)]);
     var sx = 0, sy = 0; for (var c = 0; c < t.cells.length; c++) { sx += t.cells[c][0]; sy += t.cells[c][1]; }
     t.cx = sx / t.cells.length; t.cy = sy / t.cells.length;
-    t.jit = {}; for (var c2 = 0; c2 < t.cells.length; c2++) { var cc = t.cells[c2]; t.jit[cc[0] + ',' + cc[1]] = ((cc[0] * 7 + cc[1] * 13) % 5) / 5; }
+    // ג'יטר 0..0.8 — מודולו לא-שלילי (קואורדינטות שליליות לא ייצרו אלפא שלילי).
+    t.jit = {}; for (var c2 = 0; c2 < t.cells.length; c2++) { var cc = t.cells[c2]; t.jit[cc[0] + ',' + cc[1]] = ((((cc[0] * 7 + cc[1] * 13) % 5) + 5) % 5) / 5; }
     return t;
   }
 
@@ -51,8 +52,18 @@ window.Territory = window.Territory || {};
     opts = opts || {};
     var ctx = canvas.getContext('2d');
     var screen = 'home', selected = 2, glow = 1;
+    var zoom = 1, panX = 0, panY = 0, vw = 0, vh = 0; // מצלמה (זום + הזזה)
     var homeTerr, worldTerr, worldMap = {}, particles = null, fit = null, fitKey = '', lastHomeCount = -1;
     var raf = null, running = false;
+
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    function applyCam(x, y) { return [(x - vw / 2) * zoom + vw / 2 + panX, (y - vh / 2) * zoom + vh / 2 + panY]; }
+    function setZoomAround(z1, fx, fy) {
+      z1 = clamp(z1, 0.6, 6);
+      var bx = (fx - vw / 2 - panX) / zoom + vw / 2, by = (fy - vh / 2 - panY) / zoom + vh / 2;
+      panX = fx - vw / 2 - (bx - vw / 2) * z1; panY = fy - vh / 2 - (by - vh / 2) * z1; zoom = z1;
+    }
+    function resetCamera() { zoom = 1; panX = 0; panY = 0; }
 
     function buildWorld() {
       worldTerr = WORLD_DEFS.map(function (d) { var dd = {}; for (var p in d) dd[p] = d[p]; dd.cells = genBlob(dd.seed, dd.count); return prep(dd); });
@@ -69,6 +80,15 @@ window.Territory = window.Territory || {};
 
     function computeFit(W, H) {
       var list = activeList(); if (!list || !list[0]) return null;
+      // ---- Home: גודל-תא קבוע, ממורכז על מרכז-הכובד => הצמיחה נראית כהתרחבות
+      // החוצה (ולא "מתכווץ כדי להתאים"). אפשר לצבוט-זום כשגדל מעבר למסך.
+      if (screen === 'home') {
+        var tt = homeTerr, ref = 20; // ~20 תאים לרוחב בזום ברירת-מחדל
+        var step0 = Math.min(W, H) * 0.82 / ref;
+        var gap0 = Math.max(1, step0 * 0.14), cell0 = step0 - gap0;
+        return { minX: 0, minY: 0, maxX: 0, maxY: 0, step: step0, gap: gap0, cell: cell0,
+          originX: W / 2 - tt.cx * step0 + gap0 / 2, originY: H / 2 - tt.cy * step0 + gap0 / 2 };
+      }
       var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
       for (var i = 0; i < list.length; i++) for (var c = 0; c < list[i].cells.length; c++) {
         var gx = list[i].cells[c][0] + list[i].off[0], gy = list[i].cells[c][1] + list[i].off[1];
@@ -96,16 +116,21 @@ window.Territory = window.Territory || {};
       var key = screen + '|' + cssW + 'x' + cssH;
       if (key !== fitKey) { fit = null; fitKey = key; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      var W = cssW, H = cssH;
+      var W = cssW, H = cssH; vw = W; vh = H;
       if (!fit) { fit = computeFit(W, H); initParticles(W, H); }
       var f = fit; if (!f) return;
       var t = ts / 1000, list = activeList();
 
       ctx.clearRect(0, 0, W, H);
-      // grid dots
+
+      // ---- שכבת העולם (מושפעת מזום/הזזה) ----
+      ctx.save();
+      ctx.translate(W / 2 + panX, H / 2 + panY); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2);
+
+      // grid dots (טווח מורחב כדי למלא גם בזום-אאוט)
       ctx.fillStyle = 'rgba(150,140,210,0.05)';
       var gs = f.step, ox = ((f.originX % gs) + gs) % gs, oy = ((f.originY % gs) + gs) % gs;
-      for (var gx = ox; gx < W; gx += gs) for (var gy = oy; gy < H; gy += gs) ctx.fillRect(gx - 0.5, gy - 0.5, 1, 1);
+      for (var gx = ox - W; gx < W * 2; gx += gs) for (var gy = oy - H; gy < H * 2; gy += gs) ctx.fillRect(gx - 0.5, gy - 0.5, 1, 1);
 
       // glow pass
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -153,7 +178,9 @@ window.Territory = window.Territory || {};
         rr(pos2[0] - pad, pos2[1] - pad, cw2 + pad * 2, cw2 + pad * 2, 5); ctx.stroke(); ctx.restore();
       }
 
-      // particles
+      ctx.restore(); // ---- סוף שכבת העולם (זום/הזזה) ----
+
+      // particles (מרחב-מסך, לא מושפע מזום)
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       if (particles) for (var pi = 0; pi < particles.length; pi++) {
         var p = particles[pi]; p.y -= p.vy; p.x += p.vx;
@@ -180,12 +207,16 @@ window.Territory = window.Territory || {};
       var player = null; for (var i = 0; i < list.length; i++) if (list[i].isPlayer) { player = list[i]; break; }
       if (!player) player = list[0];
       var pos = sp(player.cx + player.off[0], player.cy + player.off[1], f);
-      el.style.left = pos[0] + 'px'; el.style.top = pos[1] + 'px'; el.style.display = 'block';
+      var scr = applyCam(pos[0], pos[1]); // ממירים לקואורדינטות מסך (אחרי זום/הזזה)
+      el.style.left = scr[0] + 'px'; el.style.top = scr[1] + 'px'; el.style.display = 'block';
     }
 
     function handleClick(clientX, clientY) {
       if (screen !== 'world' || !fit) return;
-      var rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top, f = fit;
+      var rect = canvas.getBoundingClientRect(), f = fit;
+      // היפוך מצלמה: מסך -> בסיס
+      var sxp = clientX - rect.left, syp = clientY - rect.top;
+      var x = (sxp - vw / 2 - panX) / zoom + vw / 2, y = (syp - vh / 2 - panY) / zoom + vh / 2;
       var gx = Math.round((x - f.originX - f.cell / 2) / f.step), gy = Math.round((y - f.originY - f.cell / 2) / f.step);
       var found = null, best = 99;
       for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
@@ -200,10 +231,47 @@ window.Territory = window.Territory || {};
     function start() { if (running) return; running = true; raf = requestAnimationFrame(loop); }
     function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = null; }
 
+    /* ---- מחוות: צביטה (pinch), גלגל, גרירה, ונגיעה לבחירה ---- */
+    var pts = {}, dragging = false, moved = false, dsx = 0, dsy = 0, dpx = 0, dpy = 0, pD0 = 0, pZ0 = 1, pMid = null;
+    function dist(a, b) { var dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }
+    function pkeys() { return Object.keys(pts); }
+    canvas.addEventListener('pointerdown', function (e) {
+      if (canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var n = pkeys().length;
+      if (n === 1) { dragging = true; moved = false; dsx = e.clientX; dsy = e.clientY; dpx = panX; dpy = panY; }
+      else if (n === 2) {
+        dragging = false; var a = pkeys().map(function (k) { return pts[k]; });
+        pD0 = dist(a[0], a[1]); pZ0 = zoom; var r = canvas.getBoundingClientRect();
+        pMid = { x: (a[0].x + a[1].x) / 2 - r.left, y: (a[0].y + a[1].y) / 2 - r.top };
+      }
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!(e.pointerId in pts)) return;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var k = pkeys();
+      if (k.length >= 2) { var a = k.map(function (kk) { return pts[kk]; }); setZoomAround(pZ0 * dist(a[0], a[1]) / (pD0 || 1), pMid.x, pMid.y); return; }
+      if (dragging) { var dx = e.clientX - dsx, dy = e.clientY - dsy; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; panX = dpx + dx; panY = dpy + dy; }
+    });
+    function up(e) {
+      if (!(e.pointerId in pts)) return;
+      delete pts[e.pointerId]; var k = pkeys();
+      if (k.length === 0) { if (dragging && !moved) handleClick(e.clientX, e.clientY); dragging = false; }
+      else if (k.length === 1) { dsx = pts[k[0]].x; dsy = pts[k[0]].y; dpx = panX; dpy = panY; dragging = true; moved = true; }
+    }
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    canvas.addEventListener('wheel', function (e) {
+      e.preventDefault(); var r = canvas.getBoundingClientRect();
+      setZoomAround(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+
     return {
-      setScreen: function (s) { if (s !== screen) { screen = s; fit = null; } },
+      setScreen: function (s) { if (s !== screen) { screen = s; fit = null; resetCamera(); } },
       setHomeCount: function (n) { n = Math.max(6, n | 0); if (n !== lastHomeCount) { buildHome(n); fit = null; } },
       handleClick: handleClick, getSelected: getSelected,
+      zoomBy: function (dir) { setZoomAround(zoom * (dir > 0 ? 1.25 : 0.8), vw / 2, vh / 2); },
+      resetCamera: resetCamera,
       start: start, stop: stop,
     };
   };
