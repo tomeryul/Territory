@@ -108,7 +108,8 @@ window.Territory = window.Territory || {};
       var t = state.tiles[tk];
       if (t.ownerId !== meId || !inView(t.x, t.y)) continue;
       tiles.push({ x: t.x, y: t.y, sx: sx(t.x), sy: sy(t.y), size: scale, color: t.color, imageUrl: t.imageUrl, opacity: t.opacity == null ? 1 : t.opacity,
-        mask: L.neighborMask8(state.tiles, meId, t.x, t.y) });
+        mask: L.neighborMask8(state.tiles, meId, t.x, t.y),
+        selected: !!(state.ui.selection && state.ui.selection.x === t.x && state.ui.selection.y === t.y) });
     }
 
     var selection = null;

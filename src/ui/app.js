@@ -76,11 +76,18 @@ window.Territory = window.Territory || {};
       return { bg: th.bg, land: th.empty, gridLine: th.gridLine, accent: th.accent,
         primary: th.primary, secondary: th.secondary, glow: th.glow, star: th.star };
     }
+    // ממקם את מרקר האווטאר (DOM) במרכז הטריטוריה הנראית.
+    function positionMarker(c) {
+      var el = overlaySlot.querySelector && overlaySlot.querySelector('.player-marker');
+      if (!el) return;
+      if (c) { el.style.display = 'block'; el.style.left = c.x + 'px'; el.style.top = c.y + 'px'; }
+      else el.style.display = 'none';
+    }
     function render() {
       if (store.getState().ui.screen !== 'map') return;
       var s = size(); if (s.w < 2 || s.h < 2) return;
       var scene = T.Selectors.scene(renderState(), s.w, s.h);
-      renderer.draw(scene, phase, palette(), dpr);
+      positionMarker(renderer.draw(scene, phase, palette(), dpr));
       if (scene.animated && !rafId) rafId = requestAnimationFrame(animLoop);
     }
     function animLoop(ts) {
@@ -88,7 +95,7 @@ window.Territory = window.Territory || {};
       if (store.getState().ui.screen !== 'map') { rafId = null; return; }
       var s = size(); if (s.w < 2 || s.h < 2) { rafId = null; return; }
       var scene = T.Selectors.scene(renderState(), s.w, s.h);
-      renderer.draw(scene, phase, palette(), dpr);
+      positionMarker(renderer.draw(scene, phase, palette(), dpr));
       rafId = scene.animated ? requestAnimationFrame(animLoop) : null;
     }
 

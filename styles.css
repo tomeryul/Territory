@@ -11,9 +11,17 @@ html, body {
   height: 100%;
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   font-size: var(--font-base);
+  letter-spacing: -0.006em;
   overflow: hidden; -webkit-text-size-adjust: 100%; overscroll-behavior: none;
+}
+/* Spectral (serif) למספרים/כותרות — כמו בהנדאוף */
+.stat-card__value, .stat-cell__value, .chip__val, .screen__title,
+.player__name, .hero__name, .lvl-badge, .value-badge, .mission__prog,
+.market__bal, .listing__owner, .sel-panel__name, .sel-panel__val {
+  font-family: "Spectral", Georgia, serif;
+  letter-spacing: -0.018em;
 }
 #root {
   position: relative;
@@ -86,6 +94,13 @@ html, body {
 .avatar { display: flex; align-items: center; justify-content: center; background: var(--color-surface2); border: 2px solid var(--color-border-hi); border-radius: var(--radius-md); overflow: hidden; }
 .avatar--md { width: 46px; height: 46px; font-size: 24px; }
 .avatar--xl { width: 76px; height: 76px; font-size: 40px; }
+.avatar--mk { width: 100%; height: 100%; font-size: 16px; border: none; border-radius: 9px; }
+
+/* מרקר השחקן על המפה (כמו ההנדאוף) */
+.player-marker { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 4; }
+.player-marker__ring { position: absolute; inset: -12px; border-radius: 50%; background: radial-gradient(circle, var(--color-glow), transparent 70%); animation: pulse 2.4s ease-in-out infinite; }
+.player-marker__frame { position: relative; width: 34px; height: 34px; border-radius: 11px; padding: 2px; background: linear-gradient(150deg, #a78bfa, #22d3ee); box-shadow: 0 0 14px var(--color-glow); }
+.player-marker__frame .avatar { background: #0e0b1c; border: none; border-radius: 9px; }
 .avatar__img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar--anim { position: relative; }
 .avatar--anim .avatar__img { position: absolute; inset: 0; }

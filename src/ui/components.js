@@ -113,6 +113,11 @@ window.Territory = window.Territory || {};
     var cam = ctx.cam;
     function Round(label, fn, title) { return h('button', { class: 'round-btn glass', onClick: fn, title: title || null }, label); }
     return h('div', { class: 'map-overlay' },
+      // מרקר השחקן — ממוקם ע"י app.js במרכז הטריטוריה (מוסתר עד אז).
+      h('div', { class: 'player-marker', style: { display: 'none' } },
+        h('div', { class: 'player-marker__ring' }),
+        h('div', { class: 'player-marker__frame' }, Avatar(ctx, 'mk'))
+      ),
       h('div', { class: 'side-controls' },
         Round('＋', function () { cam.zoom(1); }, 'התקרב'),
         Round('－', function () { cam.zoom(-1); }, 'התרחק'),
