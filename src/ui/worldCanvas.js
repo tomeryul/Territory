@@ -53,37 +53,46 @@ window.Territory = window.Territory || {};
     var ctx = canvas.getContext('2d');
     var screen = 'home', selected = 2, glow = 1;
     var zoom = 1, panX = 0, panY = 0, vw = 0, vh = 0; // מצלמה (זום + הזזה)
-    var homeTerr, worldTerr, worldMap = {}, particles = null, fit = null, fitKey = '', lastHomeCount = -1;
+    var allTerr, neighborsCache = null, worldMap = {}, particles = null, fit = null, fitKey = '', lastHomeCount = -1;
     var raf = null, running = false;
 
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
     function applyCam(x, y) { return [(x - vw / 2) * zoom + vw / 2 + panX, (y - vh / 2) * zoom + vh / 2 + panY]; }
     function setZoomAround(z1, fx, fy) {
-      z1 = clamp(z1, 0.6, 6);
+      z1 = clamp(z1, 0.05, 8); // מינימום נמוך => אפשר לצבוט-החוצה מהבית עד לכל העולם
+
       var bx = (fx - vw / 2 - panX) / zoom + vw / 2, by = (fy - vh / 2 - panY) / zoom + vh / 2;
       panX = fx - vw / 2 - (bx - vw / 2) * z1; panY = fy - vh / 2 - (by - vh / 2) * z1; zoom = z1;
     }
     function resetCamera() { zoom = 1; panX = 0; panY = 0; }
 
-    function buildWorld() {
-      worldTerr = WORLD_DEFS.map(function (d) { var dd = {}; for (var p in d) dd[p] = d[p]; dd.cells = genBlob(dd.seed, dd.count); return prep(dd); });
-      worldMap = {};
-      worldTerr.forEach(function (t, i) { for (var c = 0; c < t.cells.length; c++) { var cc = t.cells[c]; worldMap[(cc[0] + t.off[0]) + ',' + (cc[1] + t.off[1])] = i; } });
+    // השכנים (שחקנים אחרים) — נבנים פעם אחת, מפוזרים על אותו הגריד.
+    function buildNeighbors() {
+      return WORLD_DEFS.filter(function (d) { return !d.isPlayer; }).map(function (d) {
+        var dd = {}; for (var p in d) dd[p] = d[p];
+        dd.off = [Math.round(d.off[0] * 1.5), Math.round(d.off[1] * 1.5)]; // פיזור על אותו הגריד
+        dd.cells = genBlob(d.seed, d.count); return prep(dd);
+      });
     }
-    function buildHome(count) {
+    // מפה אחת משותפת: הטריטוריה שלך (חיה/גדלה) + כל השכנים, על אותו גריד.
+    function buildAll(count) {
       count = Math.max(6, count || 6); lastHomeCount = count;
-      homeTerr = prep({ name: 'You', seed: 7, off: [0, 0], color: '#4060e6', glow: 'rgba(90,130,255,.95)', node: '#8ab0ff', isPlayer: true, cells: genBlob(7, count) });
+      if (!neighborsCache) neighborsCache = buildNeighbors();
+      var player = prep({ name: 'You', seed: 7, off: [0, 0], color: '#4060e6', glow: 'rgba(90,130,255,.95)', node: '#8ab0ff', isPlayer: true, share: '18.4%', value: '4.2M', tiles: String(count), rank: '#3', cells: genBlob(7, count) });
+      allTerr = [player].concat(neighborsCache);
+      worldMap = {};
+      allTerr.forEach(function (t, i) { for (var c = 0; c < t.cells.length; c++) { var cc = t.cells[c]; worldMap[(cc[0] + t.off[0]) + ',' + (cc[1] + t.off[1])] = i; } });
     }
-    buildWorld(); buildHome(6);
+    buildAll(6);
 
-    function activeList() { return screen === 'world' ? worldTerr : [homeTerr]; }
+    function activeList() { return allTerr; } // אותה מפה לשני המצבים (בית = זום-אין, עולם = זום-אאוט)
 
     function computeFit(W, H) {
       var list = activeList(); if (!list || !list[0]) return null;
       // ---- Home: גודל-תא קבוע, ממורכז על מרכז-הכובד => הצמיחה נראית כהתרחבות
       // החוצה (ולא "מתכווץ כדי להתאים"). אפשר לצבוט-זום כשגדל מעבר למסך.
       if (screen === 'home') {
-        var tt = homeTerr, ref = 20; // ~20 תאים לרוחב בזום ברירת-מחדל
+        var tt = allTerr[0], ref = 20; // ממורכז על הטריטוריה שלך; זום ברירת-מחדל
         var step0 = Math.min(W, H) * 0.82 / ref;
         var gap0 = Math.max(1, step0 * 0.14), cell0 = step0 - gap0;
         return { minX: 0, minY: 0, maxX: 0, maxY: 0, step: step0, gap: gap0, cell: cell0,
@@ -135,7 +144,7 @@ window.Territory = window.Territory || {};
       // glow pass
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       list.forEach(function (tt) {
-        var isSel = screen === 'world' && worldTerr[selected] === tt;
+        var isSel = screen === 'world' && allTerr[selected] === tt;
         var c = sp(tt.cx + tt.off[0], tt.cy + tt.off[1], f);
         var ext = Math.sqrt(tt.cells.length) * f.step * 0.62;
         var pulse = 0.78 + 0.22 * Math.sin(t * 1.6 + tt.seed);
@@ -149,7 +158,7 @@ window.Territory = window.Territory || {};
 
       // cells
       list.forEach(function (tt) {
-        var isSel = screen === 'world' && worldTerr[selected] === tt;
+        var isSel = screen === 'world' && allTerr[selected] === tt;
         var cw = f.cell, r = Math.max(1.2, cw * 0.18), nodeSet = {};
         for (var ni = 0; ni < tt.nodes.length; ni++) nodeSet[tt.nodes[ni][0] + ',' + tt.nodes[ni][1]] = 1;
         for (var ci = 0; ci < tt.cells.length; ci++) {
@@ -171,7 +180,7 @@ window.Territory = window.Territory || {};
 
       // selection outline (world)
       if (screen === 'world') {
-        var st = worldTerr[selected], node = st.nodes[0], pos2 = sp(node[0] + st.off[0], node[1] + st.off[1], f);
+        var st = allTerr[selected], node = st.nodes[0], pos2 = sp(node[0] + st.off[0], node[1] + st.off[1], f);
         var cw2 = f.cell, pad = f.step * 0.55, blink = 0.6 + 0.4 * Math.sin(t * 3);
         ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,' + blink + ')'; ctx.lineWidth = 2;
         ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 10;
@@ -225,7 +234,7 @@ window.Territory = window.Territory || {};
       }
       if (found !== null) { selected = found; if (opts.onSelect) opts.onSelect(getSelected()); }
     }
-    function getSelected() { return worldTerr[selected]; }
+    function getSelected() { return allTerr[selected]; }
 
     function loop(ts) { if (!running) return; draw(ts || 0); raf = requestAnimationFrame(loop); }
     function start() { if (running) return; running = true; raf = requestAnimationFrame(loop); }
@@ -268,9 +277,9 @@ window.Territory = window.Territory || {};
 
     return {
       setScreen: function (s) { if (s !== screen) { screen = s; fit = null; resetCamera(); } },
-      setHomeCount: function (n) { n = Math.max(6, n | 0); if (n !== lastHomeCount) { buildHome(n); fit = null; } },
+      setHomeCount: function (n) { n = Math.max(6, n | 0); if (n !== lastHomeCount) { buildAll(n); fit = null; } },
       handleClick: handleClick, getSelected: getSelected,
-      zoomBy: function (dir) { setZoomAround(zoom * (dir > 0 ? 1.25 : 0.8), vw / 2, vh / 2); },
+      zoomBy: function (dir) { setZoomAround(zoom * (dir > 0 ? 1.4 : 0.7), vw / 2, vh / 2); },
       resetCamera: resetCamera,
       start: start, stop: stop,
     };
