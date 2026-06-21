@@ -9,7 +9,10 @@
 (function (T) {
   'use strict';
 
-  var STORAGE_KEY = 'territory.save.v6';
+  var STORAGE_KEY = 'territory.save.v7';
+
+  // היום הנוכחי כמחרוזת 'YYYY-MM-DD' (שכבה חיצונית — אספקת תאריך ל-reducer הטהור).
+  function today() { return new Date().toISOString().slice(0, 10); }
 
   // ----- חלקי ה-state שכן נשמרים (האזורים נזרעים מחדש, לא נשמרים) -----
   function persistable(state) {
@@ -56,8 +59,13 @@
       }, 400);
     });
 
+    // ----- וו יומי: קובעים את היום הנוכחי (איפוס דיילי + קידום רצף) -----
+    store.dispatch({ type: 'SET_DAY', day: today() });
+
     // ----- ה-ticker: צובר זמן פעיל רק כשהמסך גלוי (מקור ההתרחבות) -----
     var ticker = T.createTicker(1000, function (elapsedMs) {
+      var d = today();
+      if (d !== store.getState().meta.day) store.dispatch({ type: 'SET_DAY', day: d });
       store.dispatch({ type: 'TICK', ms: elapsedMs });
     });
     ticker.start();

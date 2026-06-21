@@ -38,6 +38,23 @@ window.Territory = window.Territory || {};
       meta: {
         gems: 60, claimedMissions: {}, soldListings: {}, avatarId: 'wizard', customAvatar: null,
         resources: {}, zoneCd: {}, territoryStyle: { color: '#4060e6', effect: 'none' },
+
+        // --- כלכלת Catan ---
+        buildings: {},          // id -> רמה (count/level)
+        prodAccum: {},          // שאריות ייצור חלקיות (כדי לצבור משאבים שלמים)
+
+        // --- עץ טכנולוגיות ---
+        tech: {},               // id -> true (נחקר)
+        techPoints: 0,          // נקודות-מחקר (כולל שארית חלקית)
+
+        // --- וו יומי ---
+        day: null,              // 'YYYY-MM-DD' של היום הנוכחי (מהשכבה החיצונית)
+        streak: { count: 0, lastDay: null },
+        streakClaimedDay: null, // היום שבו נתבע פרס-הרצף לאחרונה
+        dailyClaimed: {},       // id משימה-יומית -> true (מתאפס בכל יום)
+        dailyStats: { collects: 0, trades: 0, builds: 0, researches: 0 },
+        dayBaseTiles: 0,        // גודל הטריטוריה בתחילת היום (לחישוב "היום")
+        dayBaseActiveMs: 0,     // זמן פעיל בתחילת היום
       },
 
       // מצב UI (חולף — לא נשמר, חוץ מהנושא).
@@ -46,6 +63,7 @@ window.Territory = window.Territory || {};
         screen: 'home',                      // ברירת מחדל: מסך הבית (כמו ההנדאוף)
         editTab: 'color',                    // טאב בגיליון העריכה
         sheet: null,                         // גיליון תחתון פתוח (null / 'edit')
+        trade: { from: null, to: null },     // בחירת סחר (חולף — לא נשמר)
         selection: null,
         multiSelect: { on: false, keys: [] },
       },
@@ -63,9 +81,9 @@ window.Territory = window.Territory || {};
     var tiles = null;
     var added = 0, cap = Config.growth.maxPerTick;
     var working = state;
+    var cost = T.Selectors.effectiveMsPerTile(state); // קבוע לאורך הטיק (תלוי טכנולוגיות)
 
     while (added < cap) {
-      var cost = L.costFor(owned);
       if (growthMs < cost) break;
       if (!tiles) { tiles = {}; for (var t in state.tiles) tiles[t] = state.tiles[t]; working = Object.assign({}, state, { tiles: tiles }); }
       var nt = L.nextGrowthTile(working);
@@ -81,12 +99,50 @@ window.Territory = window.Territory || {};
     return Object.assign({}, state, tiles ? { tiles: tiles, session: session } : { session: session });
   }
 
+  /* ---- ייצור פסיבי: מבנים מפיקים משאבים/נק'-מחקר לאורך זמן פעיל ----- */
+  // נצבר חלקית (prodAccum) ומומר למשאבים שלמים; משאבים נחסמים בקיבולת.
+  function applyProduction(state, dt) {
+    var S = T.Selectors;
+    var rates = S.productionRates(state);     // ליחידת-דקה, פר-משאב
+    var tpRate = S.techRate(state);           // נק'-מחקר לדקה
+    if (!tpRate) { var hasProd = false; for (var rk in rates) { if (rates[rk]) { hasProd = true; break; } } if (!hasProd) return state; }
+
+    var cap = S.resourceCap(state);
+    var res = Object.assign({}, state.meta.resources);
+    var acc = Object.assign({}, state.meta.prodAccum);
+    var perMs = dt / 60000;
+
+    for (var id in rates) {
+      if (!rates[id]) continue;
+      var gained = (acc[id] || 0) + rates[id] * perMs;
+      var whole = Math.floor(gained);
+      acc[id] = gained - whole;
+      if (whole > 0) {
+        var cur = res[id] || 0;
+        if (cur < cap) res[id] = Math.min(cap, cur + whole); // חסום בקיבולת (Catan hand-limit)
+      }
+    }
+
+    // נקודות-מחקר — נצברות חלקית, ללא תקרה.
+    var techPoints = state.meta.techPoints || 0;
+    if (tpRate) {
+      var tg = (acc.__tech || 0) + tpRate * perMs;
+      var tw = Math.floor(tg);
+      acc.__tech = tg - tw;
+      techPoints += tw;
+    }
+
+    return Object.assign({}, state, {
+      meta: Object.assign({}, state.meta, { resources: res, prodAccum: acc, techPoints: techPoints }),
+    });
+  }
+
   /* ---- ה-reducer הטהור --------------------------------------------- */
   T.reducer = function (state, action) {
     switch (action.type) {
-      // זמן פעיל -> צבירה + גידול אוטומטי מואט.
+      // זמן פעיל -> צבירה + גידול אוטומטי מואט + ייצור פסיבי מהמבנים.
       case 'TICK':
-        return applyGrowth(state, action.ms);
+        return applyProduction(applyGrowth(state, action.ms), action.ms);
 
       case 'SET_THEME':
         return Object.assign({}, state, {
@@ -164,6 +220,11 @@ window.Territory = window.Territory || {};
         return Object.assign({}, state, {
           ui: Object.assign({}, state.ui, { sheet: action.sheet }),
         });
+      // בחירת צד-סחר (from/to) במסך הסחר.
+      case 'SET_TRADE':
+        return Object.assign({}, state, {
+          ui: Object.assign({}, state.ui, { trade: Object.assign({}, state.ui.trade, action.patch) }),
+        });
 
       // רכישת טריטוריה בשוק — עולה יהלומים; מסומנת כנמכרה.
       case 'BUY_LISTING': {
@@ -180,10 +241,13 @@ window.Territory = window.Territory || {};
         var now = state.session.activeMs;
         var last = state.meta.zoneCd[action.zoneId];
         if (last != null && now - last < Config.resources.cooldownMs) return state;
+        var cap = T.Selectors.resourceCap(state);
         var res = Object.assign({}, state.meta.resources);
-        res[action.resource] = (res[action.resource] || 0) + action.amount;
+        res[action.resource] = Math.min(cap, (res[action.resource] || 0) + action.amount);
         var cd = Object.assign({}, state.meta.zoneCd); cd[action.zoneId] = now;
-        return Object.assign({}, state, { meta: Object.assign({}, state.meta, { resources: res, zoneCd: cd }) });
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, {
+          resources: res, zoneCd: cd, dailyStats: bump(state.meta.dailyStats, 'collects', 1),
+        }) });
       }
       // צבע הטריטוריה (חינם).
       case 'SET_TERRITORY_COLOR':
@@ -206,6 +270,92 @@ window.Territory = window.Territory || {};
         });
       }
 
+      /* ---- כלכלת Catan: בנייה/שדרוג, סחר ---- */
+      // בנייה או שדרוג מבנה — מנכה את עלות הרמה הנוכחית ומעלה רמה ב-1.
+      case 'BUILD_BUILDING': {
+        var b = T.BuildingById[action.id]; if (!b) return state;
+        var lvl = (state.meta.buildings && state.meta.buildings[action.id]) || 0;
+        var bcost = T.buildingCost(b, lvl);
+        var bhave = state.meta.resources || {};
+        for (var bk in bcost) if ((bhave[bk] || 0) < bcost[bk]) return state; // אין מספיק
+        var bres = Object.assign({}, bhave);
+        for (var bk2 in bcost) bres[bk2] = bres[bk2] - bcost[bk2];
+        var nb = Object.assign({}, state.meta.buildings); nb[action.id] = lvl + 1;
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, {
+          resources: bres, buildings: nb, dailyStats: bump(state.meta.dailyStats, 'builds', 1),
+        }) });
+      }
+
+      // סחר בבנק/נמל: נותנים rate יחידות מ-from, מקבלים יחידה אחת ל-to.
+      case 'TRADE_RESOURCE': {
+        var from = action.from, to = action.to;
+        if (!from || !to || from === to) return state;
+        var rate = T.Selectors.tradeRate(state);
+        var thave = state.meta.resources || {};
+        if ((thave[from] || 0) < rate) return state; // אין מספיק לסחר
+        var tcap = T.Selectors.resourceCap(state);
+        var tres = Object.assign({}, thave);
+        tres[from] = tres[from] - rate;
+        tres[to] = Math.min(tcap, (tres[to] || 0) + 1);
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, {
+          resources: tres, dailyStats: bump(state.meta.dailyStats, 'trades', 1),
+        }) });
+      }
+
+      /* ---- עץ טכנולוגיות ---- */
+      case 'RESEARCH_TECH': {
+        var node = T.TechById[action.id]; if (!node) return state;
+        var tech = state.meta.tech || {};
+        if (tech[action.id]) return state;                 // כבר נחקר
+        if (!T.techPrereqsMet(node, tech)) return state;   // חסר דרישת-קדם
+        var cost = node.cost || {};
+        if ((state.meta.techPoints || 0) < (cost.techPoints || 0)) return state;
+        var rhave = state.meta.resources || {};
+        for (var ck in cost) { if (ck === 'techPoints') continue; if ((rhave[ck] || 0) < cost[ck]) return state; }
+        var rres = Object.assign({}, rhave);
+        for (var ck2 in cost) { if (ck2 === 'techPoints') continue; rres[ck2] = rres[ck2] - cost[ck2]; }
+        var ntech = Object.assign({}, tech); ntech[action.id] = true;
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, {
+          resources: rres, tech: ntech,
+          techPoints: (state.meta.techPoints || 0) - (cost.techPoints || 0),
+          dailyStats: bump(state.meta.dailyStats, 'researches', 1),
+        }) });
+      }
+
+      /* ---- וו יומי: מעבר-יום, תביעת משימה יומית ופרס-רצף ---- */
+      // השכבה החיצונית (main.js) שולחת את היום; כאן מאפסים מונים ומקדמים רצף.
+      case 'SET_DAY': {
+        if (!action.day || action.day === state.meta.day) return state;
+        var prev = state.meta.streak || { count: 0, lastDay: null };
+        var newCount;
+        if (prev.lastDay && isYesterday(prev.lastDay, action.day)) newCount = (prev.count || 0) + 1;
+        else newCount = 1; // יום ראשון או רצף שנשבר
+        return Object.assign({}, state, { meta: Object.assign({}, state.meta, {
+          day: action.day,
+          streak: { count: newCount, lastDay: action.day },
+          dailyClaimed: {},
+          dailyStats: { collects: 0, trades: 0, builds: 0, researches: 0 },
+          dayBaseTiles: T.Selectors.territorySize(state),
+          dayBaseActiveMs: state.session.activeMs,
+        }) });
+      }
+      case 'CLAIM_DAILY_MISSION': {
+        var dms = T.Selectors.dailyMissions(state), dm = null;
+        for (var di = 0; di < dms.length; di++) if (dms[di].id === action.id) dm = dms[di];
+        if (!dm || !dm.done || dm.claimed) return state;
+        var dclaimed = Object.assign({}, state.meta.dailyClaimed); dclaimed[action.id] = true;
+        return grantReward(Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { dailyClaimed: dclaimed }),
+        }), dm.reward);
+      }
+      case 'CLAIM_STREAK': {
+        var si = T.Selectors.streakInfo(state);
+        if (!si.canClaim) return state;
+        return grantReward(Object.assign({}, state, {
+          meta: Object.assign({}, state.meta, { streakClaimedDay: state.meta.day }),
+        }), si.reward);
+      }
+
       // בחירת אווטאר מהקטלוג.
       case 'SET_AVATAR':
         return Object.assign({}, state, {
@@ -221,6 +371,36 @@ window.Territory = window.Territory || {};
         return state;
     }
   };
+
+  // מגדיל מונה יומי בערך נתון (מחזיר אובייקט חדש — אי-שינוי).
+  function bump(stats, key, by) {
+    var s = Object.assign({ collects: 0, trades: 0, builds: 0, researches: 0 }, stats);
+    s[key] = (s[key] || 0) + by;
+    return s;
+  }
+
+  // האם prevDay (YYYY-MM-DD) הוא בדיוק יום לפני curDay (לקידום רצף).
+  function isYesterday(prevDay, curDay) {
+    var p = Date.parse(prevDay + 'T00:00:00Z'), c = Date.parse(curDay + 'T00:00:00Z');
+    if (isNaN(p) || isNaN(c)) return false;
+    return c - p === 86400000;
+  }
+
+  // הענקת פרס (יהלומים/משאבים/נק'-מחקר) — משאבים נחסמים בקיבולת.
+  function grantReward(state, reward) {
+    if (!reward) return state;
+    var meta = state.meta;
+    var patch = {};
+    if (reward.gems) patch.gems = (meta.gems || 0) + reward.gems;
+    if (reward.techPoints) patch.techPoints = (meta.techPoints || 0) + reward.techPoints;
+    if (reward.res) {
+      var cap = T.Selectors.resourceCap(state);
+      var res = Object.assign({}, meta.resources);
+      for (var rk in reward.res) res[rk] = Math.min(cap, (res[rk] || 0) + reward.res[rk]);
+      patch.resources = res;
+    }
+    return Object.assign({}, state, { meta: Object.assign({}, meta, patch) });
+  }
 
   function applyToOwned(state, keys, patch) {
     var tiles = {};

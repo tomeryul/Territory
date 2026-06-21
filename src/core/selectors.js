@@ -34,9 +34,9 @@ window.Territory = window.Territory || {};
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // זמן עד הטייל הבא — פורמט HH:MM:SS.
+  // זמן עד הטייל הבא — פורמט HH:MM:SS. מושפע מטכנולוגיות גידול.
   function nextTileMs(state) {
-    return Math.max(0, L.costFor(ownedCount(state)) - state.session.growthMs);
+    return Math.max(0, effectiveMsPerTile(state) - state.session.growthMs);
   }
   function nextTileLabel(state) {
     var s = Math.ceil(nextTileMs(state) / 1000);
@@ -45,7 +45,7 @@ window.Territory = window.Territory || {};
     return (hh > 0 ? p(hh) + ':' : '') + p(mm) + ':' + p(ss);
   }
   function growthProgress(state) {
-    var cost = L.costFor(ownedCount(state));
+    var cost = effectiveMsPerTile(state);
     return cost ? state.session.growthMs / cost : 0;
   }
 
@@ -57,6 +57,153 @@ window.Territory = window.Territory || {};
     return Math.max(0, Config.resources.cooldownMs - (state.session.activeMs - last));
   }
   function zoneReady(state, zoneId) { return zoneCooldownRemainingMs(state, zoneId) <= 0; }
+
+  /* ================================================================== *
+   * כלכלת Catan: מבנים, ייצור פסיבי, קיבולת, סחר, טכנולוגיות, וו-יומי.
+   * כל המתמטיקה כאן (מקור-אמת יחיד) — ה-reducer קורא לפונקציות בזמן ריצה.
+   * ================================================================== */
+
+  function buildingLevel(state, id) {
+    return (state.meta.buildings && state.meta.buildings[id]) || 0;
+  }
+  function techOwned(state) { return (state.meta.tech) || {}; }
+  function techPoints(state) { return (state.meta.techPoints) || 0; }
+
+  // צבירת אפקטי הטכנולוגיות שנחקרו → בונוסים גלובליים.
+  function techMods(state) {
+    var m = { prodPct: 0, capBonus: 0, tradeBonus: 0, growthMult: 1 };
+    var tech = techOwned(state);
+    for (var id in tech) {
+      if (!tech[id]) continue;
+      var node = T.TechById[id]; if (!node) continue;
+      var e = node.effect || {};
+      if (e.prodPct) m.prodPct += e.prodPct;
+      if (e.capBonus) m.capBonus += e.capBonus;
+      if (e.tradeBonus) m.tradeBonus += e.tradeBonus;
+      if (e.growthMult) m.growthMult *= e.growthMult;
+    }
+    return m;
+  }
+
+  // ייצור-משאבים לדקה, פר-משאב (כולל בונוס ייצור מטכנולוגיות).
+  function productionRates(state) {
+    var rates = {};
+    var pct = 1 + techMods(state).prodPct / 100;
+    T.Buildings.forEach(function (b) {
+      if (!b.produces || b.produces === 'tech') return;
+      var lvl = buildingLevel(state, b.id);
+      if (!lvl) return;
+      rates[b.produces] = (rates[b.produces] || 0) + T.buildingYield(b, lvl) * pct;
+    });
+    return rates;
+  }
+  // נקודות-מחקר לדקה (ממעבדות) — לא מושפע מבונוס הייצור (נשמר איטי).
+  function techRate(state) {
+    var tp = 0;
+    T.Buildings.forEach(function (b) {
+      if (b.produces !== 'tech') return;
+      tp += T.buildingYield(b, buildingLevel(state, b.id));
+    });
+    return tp;
+  }
+
+  // קיבולת אחסון לכל משאב (Catan hand-limit) — בסיס + מחסנים + מחקר.
+  function resourceCap(state) {
+    var cap = Config.storage.baseCap;
+    T.Buildings.forEach(function (b) {
+      if (!b.cap) return;
+      cap += b.cap * buildingLevel(state, b.id);
+    });
+    return cap + techMods(state).capBonus;
+  }
+
+  // יחס סחר נוכחי (n:1) — בסיס פחות נמלים פחות בונוס-מחקר, עם רצפה.
+  function tradeRate(state) {
+    var rate = Config.economy.bankRate;
+    T.Buildings.forEach(function (b) {
+      if (!b.trade) return;
+      rate -= b.trade * buildingLevel(state, b.id);
+    });
+    rate -= techMods(state).tradeBonus;
+    return Math.max(Config.economy.minRate, rate);
+  }
+  // תצוגה מקדימה של עסקה: נותנים rate מ-from, מקבלים 1 ל-to.
+  function tradePreview(state, from, to) {
+    var rate = tradeRate(state);
+    return {
+      from: from, to: to, give: rate, get: 1, rate: rate,
+      canTrade: from && to && from !== to && resourceCount(state, from) >= rate,
+    };
+  }
+
+  // זמן-לטייל אפקטיבי (ms) אחרי טכנולוגיות גידול (עם רצפה).
+  function effectiveMsPerTile(state) {
+    var base = Config.growth.msPerTile * techMods(state).growthMult;
+    return Math.max(60 * 1000, Math.round(base)); // לא פחות מדקה לטייל
+  }
+
+  // רשימת מבנים מוכנה-לתצוגה: רמה, תפוקה נוכחית/הבאה, עלות-שדרוג, האם משיג.
+  function buildingList(state) {
+    return T.Buildings.map(function (b) {
+      var lvl = buildingLevel(state, b.id);
+      var cost = T.buildingCost(b, lvl);
+      var afford = true;
+      for (var k in cost) if (resourceCount(state, k) < cost[k]) afford = false;
+      return {
+        building: b, id: b.id, level: lvl, cost: cost, canAfford: afford,
+        curYield: T.buildingYield(b, lvl), nextYield: T.buildingYield(b, lvl + 1),
+      };
+    });
+  }
+
+  // רשימת טכנולוגיות מוכנה-לתצוגה: בבעלות/נעול/בר-השגה + עלות.
+  function techList(state) {
+    var tech = techOwned(state);
+    return T.Tech.map(function (n) {
+      var owned = !!tech[n.id];
+      var unlocked = T.techPrereqsMet(n, tech);
+      var afford = (techPoints(state) >= (n.cost.techPoints || 0));
+      for (var k in n.cost) { if (k === 'techPoints') continue; if (resourceCount(state, k) < n.cost[k]) afford = false; }
+      return { node: n, id: n.id, owned: owned, unlocked: unlocked, canResearch: !owned && unlocked && afford };
+    });
+  }
+
+  /* ---- וו יומי: משימות מתחלפות + רצף התחברות ---- */
+  function dailyMetric(state, metric) {
+    var d = state.meta.dailyStats || {};
+    switch (metric) {
+      case 'collects': return d.collects || 0;
+      case 'trades': return d.trades || 0;
+      case 'builds': return d.builds || 0;
+      case 'researches': return d.researches || 0;
+      case 'tilesToday': return Math.max(0, territorySize(state) - (state.meta.dayBaseTiles || 0));
+      case 'minutesToday': return Math.floor(Math.max(0, state.session.activeMs - (state.meta.dayBaseActiveMs || 0)) / 60000);
+      default: return 0;
+    }
+  }
+  function dailyMissions(state) {
+    var ids = T.dailyPick(state.meta.day);
+    var claimed = state.meta.dailyClaimed || {};
+    return ids.map(function (id) {
+      var def = T.DailyById[id];
+      var cur = Math.min(def.target, dailyMetric(state, def.metric));
+      return {
+        id: id, title: def.title, current: cur, target: def.target, reward: def.reward,
+        done: cur >= def.target, claimed: !!claimed[id],
+      };
+    });
+  }
+  function streakInfo(state) {
+    var st = state.meta.streak || { count: 0, lastDay: null };
+    var count = st.count || 0;
+    var canClaim = count > 0 && state.meta.streakClaimedDay !== state.meta.day;
+    return {
+      count: count, lastDay: st.lastDay,
+      reward: T.streakReward(count || 1),
+      canClaim: canClaim,
+      dayIndex: count > 0 ? ((count - 1) % 7) : 0, // 0..6 בתוך מחזור 7-ימים
+    };
+  }
 
   /* ---- שווי: משבצת שווה יותר ככל שצמודה לאזורים בעלי-ערך ----------- */
   // מלמד "מיקום": קרבה לעיר/תשתית/מים מעלה ערך — כמו נדל"ן אמיתי.
@@ -170,6 +317,13 @@ window.Territory = window.Territory || {};
     myTileKeys: myTileKeys,
     nextTileMs: nextTileMs, growthProgress: growthProgress,
     resourceCount: resourceCount, zoneCooldownRemainingMs: zoneCooldownRemainingMs, zoneReady: zoneReady,
+    // כלכלה / טכנולוגיות / וו-יומי
+    buildingLevel: buildingLevel, techMods: techMods, techPoints: techPoints,
+    productionRates: productionRates, techRate: techRate,
+    resourceCap: resourceCap, tradeRate: tradeRate, tradePreview: tradePreview,
+    effectiveMsPerTile: effectiveMsPerTile,
+    buildingList: buildingList, techList: techList,
+    dailyMissions: dailyMissions, streakInfo: streakInfo,
     activeTimeLabel: activeTimeLabel,
     nextTileLabel: nextTileLabel,
     portfolioValue: portfolioValue,

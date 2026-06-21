@@ -87,6 +87,8 @@ window.Territory = window.Territory || {};
       ),
       // ---- resources bar (משאבים שנאספו מהאזורים) ----
       ResourcesBar(ctx),
+      // ---- streak banner (וו יומי) ----
+      StreakBanner(ctx),
       // ---- profile card ----
       h('div', { class: 'profile-card glass' },
         h('div', { class: 'pc-orb' }),
@@ -128,6 +130,13 @@ window.Territory = window.Territory || {};
       h('div', { class: 'home-actions' },
         h('div', { class: 'btn-edit', onClick: function () { d({ type: 'SET_SHEET', sheet: 'edit' }); } },
           h('div', { class: 'btn-edit__sheen' }), Icon('edit', '#fff', 20), h('span', {}, 'Edit territory')),
+        // רשת הפעולות הראשית (כלכלת Catan + וו-יומי)
+        h('div', { class: 'action-grid' },
+          ActionTile('🏗️', 'בנייה', 'מבנים וייצור', '#22d3ee', function () { d({ type: 'SET_SCREEN', screen: 'build' }); }),
+          ActionTile('🔁', 'סחר', 'החלפת משאבים', '#7af0e0', function () { d({ type: 'SET_SCREEN', screen: 'trade' }); }),
+          ActionTile('🧪', 'מחקר', 'עץ טכנולוגיות', '#c4b5fd', function () { d({ type: 'SET_SCREEN', screen: 'tech' }); }),
+          ActionTile('🎯', 'יומי', 'משימות ורצף', '#f5c451', function () { d({ type: 'SET_SCREEN', screen: 'daily' }); })
+        ),
         h('div', { class: 'action-row' },
           h('div', { class: 'btn-sec', onClick: function () { d({ type: 'SET_SCREEN', screen: 'market' }); } }, Icon('cart', '#22d3ee', 18), h('span', { style: { color: '#d6e9f5' } }, 'Market')),
           h('div', { class: 'btn-sec', onClick: function () { d({ type: 'SET_SCREEN', screen: 'missions' }); } }, Icon('target', '#f5c451', 18), h('span', { style: { color: '#f3e3bd' } }, 'Missions'))
@@ -204,6 +213,10 @@ window.Territory = window.Territory || {};
       case 'world': return World(ctx);
       case 'market': return MarketScreen(ctx);
       case 'missions': return MissionsScreen(ctx);
+      case 'build': return BuildScreen(ctx);
+      case 'trade': return TradeScreen(ctx);
+      case 'tech': return TechScreen(ctx);
+      case 'daily': return DailyScreen(ctx);
       case 'profile': return ProfileScreen(ctx);
       case 'settings': return SettingsScreen(ctx);
       case 'friends': return Stub('Friends', '👥', 'רשימת חברים ודירוגים — בקרוב.', ctx);
@@ -257,6 +270,141 @@ window.Territory = window.Territory || {};
         m.claimed ? h('span', { class: 'mission__done' }, '✓') : h('div', { class: 'btn-sec btn-sec--sm' + (m.done ? '' : ' btn--disabled'), onClick: m.done ? function () { d({ type: 'CLAIM_MISSION', id: m.id }); } : null }, 'קבל')));
   }
 
+  // עזר: רינדור עלות-משאבים (אדום אם חסר).
+  function costRow(cost, have, extra) {
+    var parts = [];
+    for (var k in cost) {
+      var enough = (have[k] || 0) >= cost[k];
+      var label = (k === 'techPoints') ? '🧪' : (T.Resources[k] ? T.Resources[k].emoji : k);
+      parts.push(h('span', { class: 'cost-chip' + (enough ? '' : ' cost-chip--miss') }, label + ' ' + cost[k]));
+    }
+    if (extra) parts.push(extra);
+    return h('div', { class: 'cost-row' }, parts);
+  }
+
+  /* ---- Build — מבנים, ייצור פסיבי, קיבולת, סחר ---- */
+  function BuildScreen(ctx) {
+    var st = ctx.state, S = ctx.S, d = ctx.dispatch;
+    var list = S.buildingList(st), have = st.meta.resources || {};
+    var rates = S.productionRates(st), tpRate = S.techRate(st);
+    var rateLine = Object.keys(T.Resources).map(function (id) {
+      return (rates[id] ? T.Resources[id].emoji + (Math.round(rates[id] * 10) / 10) + '/דק׳ ' : '');
+    }).join('') + (tpRate ? '🧪' + tpRate + '/דק׳' : '');
+    return Sub('בנייה וכלכלה', h('div', { class: 'build' },
+      h('div', { class: 'eco-summary glass' },
+        h('div', {}, h('span', { class: 'eco-summary__l' }, 'ייצור'), h('div', { class: 'eco-summary__v' }, rateLine || 'אין עדיין')),
+        h('div', {}, h('span', { class: 'eco-summary__l' }, 'יחס סחר'), h('div', { class: 'eco-summary__v' }, S.tradeRate(st) + ':1'))),
+      h('div', { class: 'build-list' }, list.map(function (b) { return BuildingRow(b, have, d); })),
+      BackBtn(ctx)));
+  }
+  function BuildingRow(b, have, d) {
+    var bld = b.building;
+    var yieldTxt;
+    if (bld.produces === 'tech') yieldTxt = '🧪 ' + b.curYield + ' → ' + b.nextYield + '/דק׳';
+    else if (bld.produces) yieldTxt = (T.Resources[bld.produces] ? T.Resources[bld.produces].emoji : '') + ' ' + b.curYield + ' → ' + b.nextYield + '/דק׳';
+    else if (bld.cap) yieldTxt = '🛢️ +' + bld.cap + ' קיבולת/רמה';
+    else if (bld.trade) yieldTxt = '⚖️ סחר -' + bld.trade + '/רמה';
+    else yieldTxt = '';
+    return h('div', { class: 'build-row glass' },
+      h('div', { class: 'build-row__icon' }, bld.emoji),
+      h('div', { class: 'build-row__main' },
+        h('div', { class: 'build-row__top' }, h('span', { class: 'build-row__name' }, bld.name),
+          h('span', { class: 'build-row__lvl' }, b.level > 0 ? 'רמה ' + b.level : 'לא נבנה')),
+        h('div', { class: 'build-row__yield' }, yieldTxt),
+        costRow(b.cost, have)),
+      h('div', { class: 'btn-sec btn-sec--sm' + (b.canAfford ? '' : ' btn--disabled'), onClick: b.canAfford ? function () { d({ type: 'BUILD_BUILDING', id: b.id }); } : null },
+        b.level > 0 ? 'שדרג' : 'בנה'));
+  }
+
+  /* ---- Trade — החלפת משאבים בבנק/נמל ---- */
+  function TradeScreen(ctx) {
+    var st = ctx.state, S = ctx.S, d = ctx.dispatch;
+    var sel = st.ui.trade || { from: null, to: null }, rate = S.tradeRate(st);
+    var ids = Object.keys(T.Resources);
+    function pickRow(side) {
+      return h('div', { class: 'trade-picks' }, ids.map(function (id) {
+        var r = T.Resources[id], n = Math.floor(S.resourceCount(st, id));
+        var active = sel[side] === id;
+        var dim = side === 'from' && n < rate;
+        return h('button', { class: 'trade-chip' + (active ? ' trade-chip--sel' : '') + (dim ? ' trade-chip--dim' : ''),
+          onClick: function () { var patch = {}; patch[side] = id; d({ type: 'SET_TRADE', patch: patch }); } },
+          h('span', { class: 'trade-chip__e' }, r.emoji), h('span', { class: 'trade-chip__n' }, String(n)));
+      }));
+    }
+    var canTrade = sel.from && sel.to && sel.from !== sel.to && Math.floor(S.resourceCount(st, sel.from)) >= rate;
+    var preview = (sel.from && sel.to && sel.from !== sel.to)
+      ? (rate + ' ' + T.Resources[sel.from].emoji + ' → 1 ' + T.Resources[sel.to].emoji)
+      : 'בחר משאב לתת ומשאב לקבל';
+    return Sub('סחר', h('div', { class: 'trade' },
+      h('div', { class: 'trade-rate glass' }, 'יחס הסחר הנוכחי: ' + rate + ':1 ',
+        h('span', { class: 'hint', style: { display: 'block', marginTop: '4px' } }, 'בנה נמל סחר או חקור מיקוח כדי לשפר.')),
+      h('div', { class: 'section-title' }, 'נותן'), pickRow('from'),
+      h('div', { class: 'section-title' }, 'מקבל'), pickRow('to'),
+      h('div', { class: 'trade-preview' }, preview),
+      h('div', { class: 'btn-edit' + (canTrade ? '' : ' btn--disabled'), onClick: canTrade ? function () { d({ type: 'TRADE_RESOURCE', from: sel.from, to: sel.to }); } : null }, 'בצע עסקה'),
+      BackBtn(ctx)));
+  }
+
+  /* ---- Tech — עץ טכנולוגיות (יעד ארוך-טווח) ---- */
+  function TechScreen(ctx) {
+    var st = ctx.state, S = ctx.S, d = ctx.dispatch;
+    var list = S.techList(st), have = st.meta.resources || {};
+    var tpHave = Object.assign({ techPoints: S.techPoints(st) }, have);
+    // קיבוץ לפי שכבה.
+    var tiers = {};
+    list.forEach(function (t) { (tiers[t.node.tier] = tiers[t.node.tier] || []).push(t); });
+    var sections = Object.keys(tiers).sort().map(function (tier) {
+      return h('div', {}, h('div', { class: 'section-title' }, 'שכבה ' + tier),
+        h('div', { class: 'tech-list' }, tiers[tier].map(function (t) { return TechRow(t, tpHave, d); })));
+    });
+    return Sub('עץ טכנולוגיות', h('div', { class: 'tech' },
+      h('div', { class: 'eco-summary glass' }, h('span', { class: 'eco-summary__l' }, 'נקודות מחקר'),
+        h('div', { class: 'eco-summary__v' }, '🧪 ' + S.techPoints(st) + '  ·  +' + S.techRate(st) + '/דק׳')),
+      sections, BackBtn(ctx)));
+  }
+  function TechRow(t, have, d) {
+    var n = t.node, cls = t.owned ? ' tech-row--owned' : (t.unlocked ? '' : ' tech-row--locked');
+    return h('div', { class: 'tech-row glass' + cls },
+      h('div', { class: 'tech-row__icon' }, n.emoji),
+      h('div', { class: 'tech-row__main' },
+        h('div', { class: 'tech-row__name' }, n.name),
+        h('div', { class: 'tech-row__desc' }, n.desc),
+        t.owned ? null : costRow(n.cost, have)),
+      t.owned ? h('span', { class: 'tech-row__check' }, '✓')
+        : (t.unlocked
+          ? h('div', { class: 'btn-sec btn-sec--sm' + (t.canResearch ? '' : ' btn--disabled'), onClick: t.canResearch ? function () { d({ type: 'RESEARCH_TECH', id: n.id }); } : null }, 'חקור')
+          : h('span', { class: 'tech-row__lock' }, '🔒')));
+  }
+
+  /* ---- Daily — רצף + משימות יומיות + משימות-חיים ---- */
+  function DailyScreen(ctx) {
+    var st = ctx.state, S = ctx.S, P = ctx.P, d = ctx.dispatch, si = S.streakInfo(st);
+    var track = []; for (var i = 0; i < 7; i++) {
+      var on = i <= si.dayIndex && si.count > 0;
+      track.push(h('div', { class: 'streak-cell' + (on ? ' streak-cell--on' : '') + (i === 6 ? ' streak-cell--big' : '') },
+        h('span', { class: 'streak-cell__d' }, 'י' + (i + 1)),
+        h('span', { class: 'streak-cell__r' }, rewardText(T.streakReward(i + 1)))));
+    }
+    return Sub('משימות יומיות', h('div', { class: 'daily' },
+      h('div', { class: 'streak-board glass' },
+        h('div', { class: 'streak-board__head' },
+          h('span', {}, '🔥 רצף ' + si.count + ' ימים'),
+          si.canClaim ? h('div', { class: 'btn-sec btn-sec--sm', onClick: function () { d({ type: 'CLAIM_STREAK' }); } }, 'קבל ' + rewardText(si.reward)) : h('span', { class: 'streak__done' }, '✓ נתבע היום')),
+        h('div', { class: 'streak-track' }, track)),
+      h('div', { class: 'section-title' }, 'היום'),
+      h('div', { class: 'mission-list' }, S.dailyMissions(st).map(function (m) { return DailyRow(m, d); })),
+      h('div', { class: 'section-title' }, 'משימות-חיים'),
+      h('div', { class: 'mission-list' }, P.missions(st).map(function (m) { return MissionRow(m, d); })),
+      BackBtn(ctx)));
+  }
+  function DailyRow(m, d) {
+    return h('div', { class: 'mission glass' + (m.done ? ' mission--done' : '') },
+      h('div', { class: 'mission__main' }, h('div', { class: 'mission__title' }, m.title), h('div', { class: 'mission__prog' }, m.current + ' / ' + m.target),
+        h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: Math.round(m.current / m.target * 100) + '%' } }))),
+      h('div', { class: 'mission__reward' }, h('span', { class: 'reward' }, rewardText(m.reward)),
+        m.claimed ? h('span', { class: 'mission__done' }, '✓') : h('div', { class: 'btn-sec btn-sec--sm' + (m.done ? '' : ' btn--disabled'), onClick: m.done ? function () { d({ type: 'CLAIM_DAILY_MISSION', id: m.id }); } : null }, 'קבל')));
+  }
+
   /* ---- Profile ---- */
   function ProfileScreen(ctx) {
     var st = ctx.state, P = ctx.P, S = ctx.S, lvl = P.levelInfo(st);
@@ -297,7 +445,7 @@ window.Territory = window.Territory || {};
     function Row(label, control) { return h('div', { class: 'set-row glass' }, h('span', {}, label), control); }
     return Sub('Settings', h('div', { class: 'settings' },
       Row('🌙 מצב לילה', h('div', { class: 'btn-sec btn-sec--sm', onClick: function () { d({ type: 'SET_THEME', theme: night ? 'dark' : 'night' }); } }, night ? 'פעיל' : 'כבוי')),
-      Row('איפוס התקדמות', h('div', { class: 'btn-sec btn-sec--sm', onClick: function () { if (typeof window !== 'undefined') { try { window.localStorage.removeItem('territory.save.v6'); } catch (e) {} window.location.reload(); } } }, 'אפס')),
+      Row('איפוס התקדמות', h('div', { class: 'btn-sec btn-sec--sm', onClick: function () { if (typeof window !== 'undefined') { try { window.localStorage.removeItem('territory.save.v7'); } catch (e) {} window.location.reload(); } } }, 'אפס')),
       h('p', { class: 'hint' }, 'מצב לילה מעמעם את המסך לשהייה ארוכה וחיסכון בסוללה.'),
       BackBtn(ctx)));
   }
@@ -313,14 +461,49 @@ window.Territory = window.Territory || {};
       h('div', { class: 'countdown__bar' }, h('div', { class: 'countdown__fill', style: { width: Math.round(S.growthProgress(st) * 100) + '%' } })));
   }
 
-  /* ---- סרגל משאבים שנאספו מהאזורים ---- */
+  /* ---- סרגל משאבים שנאספו מהאזורים (עם קיבולת אחסון) ---- */
   function ResourcesBar(ctx) {
-    var st = ctx.state, S = ctx.S;
+    var st = ctx.state, S = ctx.S, cap = S.resourceCap(st);
     return h('div', { class: 'res-bar' }, Object.keys(T.Resources).map(function (id) {
-      var r = T.Resources[id];
-      return h('div', { class: 'res-pill' }, h('span', { class: 'res-pill__i' }, r.emoji),
-        h('span', { class: 'res-pill__n', style: { color: r.color } }, String(S.resourceCount(st, id))));
-    }));
+      var r = T.Resources[id], n = Math.floor(S.resourceCount(st, id)), full = n >= cap;
+      return h('div', { class: 'res-pill' + (full ? ' res-pill--full' : '') }, h('span', { class: 'res-pill__i' }, r.emoji),
+        h('span', { class: 'res-pill__n', style: { color: full ? '#ff8a8a' : r.color } }, String(n)));
+    }).concat([
+      h('div', { class: 'res-pill res-pill--cap', title: 'קיבולת אחסון' }, h('span', { class: 'res-pill__i' }, '🛢️'),
+        h('span', { class: 'res-pill__n', style: { color: '#9aa6c8' } }, String(cap)))
+    ]));
+  }
+
+  /* ---- אריח-פעולה ברשת הבית ---- */
+  function ActionTile(emoji, title, sub, color, onClick) {
+    return h('div', { class: 'act-tile glass', onClick: onClick },
+      h('div', { class: 'act-tile__emoji', style: { textShadow: '0 0 14px ' + color } }, emoji),
+      h('div', { class: 'act-tile__title' }, title),
+      h('div', { class: 'act-tile__sub' }, sub));
+  }
+
+  /* ---- באנר רצף-התחברות יומי ---- */
+  function StreakBanner(ctx) {
+    var st = ctx.state, S = ctx.S, d = ctx.dispatch, si = S.streakInfo(st);
+    var dots = []; for (var i = 0; i < 7; i++) dots.push(h('span', { class: 'streak-dot' + (i <= si.dayIndex && si.count > 0 ? ' streak-dot--on' : '') }));
+    return h('div', { class: 'streak glass', onClick: function () { d({ type: 'SET_SCREEN', screen: 'daily' }); } },
+      h('div', { class: 'streak__left' },
+        h('span', { class: 'streak__flame' }, '🔥'),
+        h('div', {}, h('div', { class: 'streak__count' }, 'רצף ' + si.count + ' ימים'),
+          h('div', { class: 'streak__dots' }, dots))),
+      si.canClaim
+        ? h('div', { class: 'btn-sec btn-sec--sm', onClick: function (e) { e.stopPropagation && e.stopPropagation(); d({ type: 'CLAIM_STREAK' }); } }, 'קבל ' + rewardText(si.reward))
+        : h('span', { class: 'streak__done' }, '✓ נתבע')
+    );
+  }
+  // טקסט תמציתי לפרס (יהלומים/נק'-מחקר/משאבים).
+  function rewardText(r) {
+    if (!r) return '';
+    var parts = [];
+    if (r.gems) parts.push('💎' + r.gems);
+    if (r.techPoints) parts.push('🧪' + r.techPoints);
+    if (r.res) for (var k in r.res) parts.push((T.Resources[k] ? T.Resources[k].emoji : '') + r.res[k]);
+    return parts.join(' ');
   }
 
   /* ---- גיליון עיצוב הטריטוריה: צבע (חינם) + אפקטים (עולים משאבים) ---- */

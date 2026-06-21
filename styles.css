@@ -247,3 +247,71 @@ html, body {
 .effect__name { font-size: 12px; font-weight: 700; }
 .effect__cost { font-size: 11px; color: #9fd7e6; }
 .swatch--sel { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,.6); }
+
+/* ===== כלכלת Catan: רשת פעולות, רצף, בנייה, סחר, מחקר ===== */
+.res-pill--full { border-color: rgba(255,120,120,.5); box-shadow: 0 0 8px rgba(255,90,90,.3); }
+.res-pill--cap { background: rgba(255,255,255,.03); border-style: dashed; }
+
+/* רשת הפעולות הראשית בבית */
+.action-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 2px 0 9px; }
+.act-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 11px 4px; border-radius: 16px; cursor: pointer; background: linear-gradient(160deg, rgba(48,40,82,.55), rgba(15,14,32,.6)); border: 1px solid rgba(150,120,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 6px 16px rgba(0,0,0,.38); }
+.act-tile:active { transform: scale(.96); }
+.act-tile__emoji { font-size: 22px; line-height: 1; }
+.act-tile__title { font-size: 12.5px; font-weight: 800; color: #ece9f7; }
+.act-tile__sub { font-size: 9px; color: #8a7fb0; text-align: center; }
+
+/* באנר רצף בבית */
+.streak { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 16px; cursor: pointer; background: linear-gradient(150deg, rgba(70,46,30,.5), rgba(20,15,30,.62)); border: 1px solid rgba(245,196,81,.28); }
+.streak__left { display: flex; align-items: center; gap: 10px; }
+.streak__flame { font-size: 20px; filter: drop-shadow(0 0 8px rgba(245,160,60,.7)); }
+.streak__count { font-size: 13px; font-weight: 800; color: #ffe6ab; }
+.streak__dots { display: flex; gap: 4px; margin-top: 4px; }
+.streak-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); }
+.streak-dot--on { background: linear-gradient(150deg,#f5c451,#ff8a3c); box-shadow: 0 0 7px rgba(245,180,80,.8); }
+.streak__done { font-size: 12px; font-weight: 700; color: #a7f5c0; }
+
+/* תקציר כלכלי */
+.eco-summary { display: flex; gap: 14px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; background: linear-gradient(150deg, rgba(54,42,96,.5), rgba(15,14,32,.66)); border: 1px solid rgba(150,120,255,.2); }
+.eco-summary__l { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8a7fb0; }
+.eco-summary__v { font-family: "Spectral", serif; font-weight: 700; font-size: 14px; color: #d9e8f5; margin-top: 2px; }
+
+/* עלות-משאבים */
+.cost-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.cost-chip { font-size: 11px; font-weight: 700; color: #cfe0ee; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid rgba(150,120,255,.18); font-family: "Spectral", serif; }
+.cost-chip--miss { color: #ff8a8a; border-color: rgba(255,110,110,.4); }
+
+/* בנייה */
+.build, .trade, .tech, .daily { display: flex; flex-direction: column; gap: 12px; }
+.build-list, .tech-list { display: flex; flex-direction: column; gap: 10px; }
+.build-row, .tech-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: linear-gradient(150deg, rgba(54,42,96,.5), rgba(15,14,32,.66)); border: 1px solid rgba(150,120,255,.2); }
+.build-row__icon, .tech-row__icon { font-size: 26px; width: 34px; text-align: center; }
+.build-row__main, .tech-row__main { flex: 1; min-width: 0; }
+.build-row__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.build-row__name, .tech-row__name { font-size: 14px; font-weight: 800; color: #ece9f7; }
+.build-row__lvl { font-size: 11px; color: #b9a8f0; font-family: "Spectral", serif; }
+.build-row__yield { font-size: 12px; color: #9fd7e6; margin: 3px 0; font-family: "Spectral", serif; }
+.tech-row__desc { font-size: 12px; color: #c9bdf5; margin: 2px 0; }
+.tech-row--owned { border-color: rgba(120,240,180,.4); }
+.tech-row--locked { opacity: .55; }
+.tech-row__check { font-size: 20px; color: #a7f5c0; }
+.tech-row__lock { font-size: 18px; opacity: .7; }
+
+/* סחר */
+.trade-rate { padding: 12px 14px; border-radius: 16px; font-size: 14px; font-weight: 700; color: #d9e8f5; background: linear-gradient(150deg, rgba(54,42,96,.5), rgba(15,14,32,.66)); border: 1px solid rgba(150,120,255,.2); }
+.trade-picks { display: flex; gap: 8px; flex-wrap: wrap; }
+.trade-chip { flex: 1 1 0; min-width: 56px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(150,120,255,.2); color: #ece9f7; font-family: inherit; }
+.trade-chip__e { font-size: 20px; }
+.trade-chip__n { font-family: "Spectral", serif; font-weight: 700; font-size: 13px; }
+.trade-chip--sel { border-color: #22d3ee; box-shadow: 0 0 14px rgba(34,211,238,.45); }
+.trade-chip--dim { opacity: .4; }
+.trade-preview { text-align: center; font-family: "Spectral", serif; font-weight: 700; font-size: 16px; color: #ffe6ab; padding: 6px; }
+
+/* לוח רצף במסך היומי */
+.streak-board { padding: 14px; border-radius: 18px; background: linear-gradient(150deg, rgba(70,46,30,.45), rgba(18,14,30,.66)); border: 1px solid rgba(245,196,81,.26); }
+.streak-board__head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 800; color: #ffe6ab; }
+.streak-track { display: flex; gap: 6px; margin-top: 12px; }
+.streak-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(150,120,255,.16); }
+.streak-cell--on { background: linear-gradient(160deg, rgba(245,196,81,.22), rgba(255,138,60,.12)); border-color: rgba(245,180,80,.5); }
+.streak-cell--big { border-color: rgba(245,196,81,.6); box-shadow: 0 0 12px rgba(245,180,80,.35); }
+.streak-cell__d { font-size: 10px; color: #b9a8f0; font-weight: 700; }
+.streak-cell__r { font-size: 9.5px; color: #cfe0ee; text-align: center; }
